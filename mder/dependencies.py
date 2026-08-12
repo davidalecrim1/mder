@@ -63,7 +63,7 @@ DEPENDENCY_GROUPS = [
         "system": [
             ("ebook-convert", "Calibre", "install Calibre: https://calibre-ebook.com/download"),
         ],
-        "note": "no fallback — Calibre is required for these formats",
+        "note": "Calibre is required for these formats",
     },
 ]
 

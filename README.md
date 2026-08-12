@@ -52,10 +52,10 @@ curl -fsSL https://raw.githubusercontent.com/davidalecrim1/mder/master/install.s
 
 It installs into `~/.claude/skills/mder` (Claude Code) and `~/.agents/skills/mder` (Codex and OpenCode, which share the cross-agent folder). Re-running updates the skill in place.
 
-Then check the optional extractors (EPUB/PDF/DOCX quality) and install anything missing — the command prints exactly what to run:
+Check the optional extractors (EPUB/PDF/DOCX quality) and install anything missing — the command prints exactly what to run. It works straight from GitHub, no clone or install needed:
 
 ```bash
-python3 ~/.claude/skills/mder/scripts/extract.py --check
+curl -fsSL https://raw.githubusercontent.com/davidalecrim1/mder/master/scripts/extract.py | python3 - --check
 ```
 
 ### 2. Run it
