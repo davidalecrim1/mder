@@ -95,7 +95,7 @@ Throughout the workflow, parse arguments as follows:
   - `--raw-only` — a boolean switch (takes no value). Set `RAW_ONLY=true`. This selects **Mode 4 (Raw-Only Extraction)**: only the raw chapter split and a lean `SKILL.md` index are written — no summaries, glossary, patterns, or cheatsheet. Default is `RAW_ONLY=false`.
 - **Positional (legacy, still supported):** any bare argument that is a file, folder, or glob → append to `INPUT_PATHS`. A trailing argument that is not an existing path but looks like a skill slug (lowercase hyphens, alphanumeric) → treat as `SKILL_NAME`.
 - If `OUTPUT_ROOT` was not provided, default it to `$HOME/.mder`.
-- If any input path is an existing skill directory (contains `SKILL.md` and a `chapters/` sub-folder), or if `SKILL_NAME` matches an existing skill slug in `SKILLS_HOME`, flag this run as an **Update/Fold-in** operation (Mode 4).
+- If any input path is an existing skill directory (contains `SKILL.md` and a `chapters/` sub-folder), or if `SKILL_NAME` matches an existing skill slug in `SKILLS_HOME`, flag this run as an **Update/Fold-in** operation (Mode 5).
 
 ---
 
@@ -315,7 +315,7 @@ Otherwise, derive the slug:
 
 Check if `$SKILLS_HOME/<skill_name>/` already exists.
 If it does, prompt the user to choose:
-1. **Update / Fold-in** (Mode 4) — integrate new files/content into the existing skill components.
+1. **Update / Fold-in** (Mode 5) — integrate new files/content into the existing skill components.
 2. **Overwrite** — delete and regenerate the skill from scratch.
 3. **Rename** — append `-2` or use a different custom slug.
 

@@ -26,7 +26,7 @@ scripts/extract.py <paths…> --mode <technical|text>
                ▼
           Claude analyzes structure
           (title, author, chapters, ToC — spanning all sources)
-          ── or, if targeting an existing skill: folds new content in (Mode 4)
+          ── or, if targeting an existing skill: folds new content in (Mode 5)
                │
                ▼
           Copies raw slices → chapters/raw/  (verbatim, zero-token file copy)
