@@ -42,6 +42,34 @@ Each `summary/` file pairs 1:1 with a `raw/` file by filename: reason over the s
 
 ## Usage
 
+### 1. Install the `/mder` skill
+
+`mder` runs as a skill inside your coding agent. Install it once per agent by cloning this repo into that agent's skills folder:
+
+| Agent | Skills folder | Install |
+|-------|---------------|---------|
+| **Claude Code** | `~/.claude/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.claude/skills/mder` |
+| **Codex** | `~/.agents/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.agents/skills/mder` |
+| **OpenCode** | `~/.agents/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.agents/skills/mder` |
+
+Codex and OpenCode both discover the cross-agent `~/.agents/skills/` folder, so one clone covers both.
+
+**Install for every agent at once** — the script clones into both skills folders (and updates them if already present):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/davidalecrim1/mder/master/install.sh | bash
+```
+
+Then check the optional extractors (EPUB/PDF/DOCX quality) and install anything missing — the command prints exactly what to run:
+
+```bash
+python3 ~/.claude/skills/mder/scripts/extract.py --check
+```
+
+### 2. Run it
+
+Open any agent — **Claude Code, Codex, or OpenCode** — and run:
+
 ```bash
 /mder --input ~/path/to/book.epub --output ~/Documents/mder/books/
 ```
@@ -50,13 +78,3 @@ Each `summary/` file pairs 1:1 with a `raw/` file by filename: reason over the s
 - `--output <dir>` — destination root. Defaults to `~/.mder/`.
 
 The result is written to `<output>/<book-slug>/` (e.g. `~/.mder/skin-in-the-game/`). The legacy positional form `/mder book.epub my-slug` still works.
-
-## This fork
-
-This is a personal fork of [virgiliojr94/book-to-skill](https://github.com/virgiliojr94/book-to-skill/tree/master).
-
-The upstream project installs each converted book **as an agent skill** into your skills directory (`~/.claude/skills/`, etc.), where the host auto-discovers it. This fork changes that: converted books are written as plain **markdown folders** to a directory of your choice (default `~/.mder/`), so they are **not** preinstalled or auto-loaded. You load a file manually when you need it — and can still copy one into a skills directory later if you want it as a skill.
-
-## License
-
-MIT — applies to the converter (code + skill definition) in this repository, **not** to any book or document you process with it.
