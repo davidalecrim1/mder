@@ -3,15 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "book-to-skill"
-version = "1.4.0"
-description = "Convert books and documents into structured, on-demand agent skills."
+name = "mder"
+version = "0.0.1"
+description = "Convert documents into structured, on-demand markdown knowledge folders for AI agents."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 
 [project.scripts]
-book-to-skill = "book_to_skill.cli:main"
+mder = "mder.cli:main"
 
 [project.optional-dependencies]
 epub = ["ebooklib", "beautifulsoup4"]

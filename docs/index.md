@@ -1,6 +1,6 @@
 ---
-description: "Turn any book, PDF or EPUB into a structured agent skill for Claude Code, GitHub Copilot CLI and Amp. Named frameworks and decision rules, loaded on demand."
-seo_title: "book-to-skill - Turn Any Book Into an AI Agent Skill"
+description: "Turn any book, PDF or EPUB into a structured agent skill for Claude Code, Codex, and OpenCode. Named frameworks and decision rules, loaded on demand."
+seo_title: "mder - Turn Any Book Into an AI Agent Skill"
 hide:
   - navigation
   - toc
@@ -10,19 +10,19 @@ hide:
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "book-to-skill",
+  "name": "mder",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Linux, macOS, Windows",
-  "description": "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, RTF, MOBI/AZW) into structured, on-demand agent skills for Claude Code, GitHub Copilot CLI and Amp.",
-  "url": "https://booktoskill.is-a.dev/",
-  "codeRepository": "https://github.com/virgiliojr94/book-to-skill",
+  "description": "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, RTF, MOBI/AZW) into structured, on-demand agent skills for Claude Code, Codex, and OpenCode.",
+  "url": "https://davidalecrim1.github.io/mder/",
+  "codeRepository": "https://github.com/davidalecrim1/mder",
   "license": "https://opensource.org/licenses/MIT",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "author": { "@type": "Person", "name": "virgiliojr94", "url": "https://github.com/virgiliojr94" }
+  "author": { "@type": "Person", "name": "davidalecrim1", "url": "https://github.com/davidalecrim1" }
 }
 </script>
 
-# book-to-skill
+# mder
 
 <p style="font-size: 1.25rem; max-width: 42rem;">
 Turn any book or document into a structured, on-demand agent skill — named frameworks, decision rules, and anti-patterns. <strong>Structure, not a summary.</strong>
@@ -30,11 +30,11 @@ Turn any book or document into a structured, on-demand agent skill — named fra
 
 [Get started](guide.md){ .md-button .md-button--primary }
 [Skill reference](skill-reference.md){ .md-button }
-[GitHub](https://github.com/virgiliojr94/book-to-skill){ .md-button }
+[GitHub](https://github.com/davidalecrim1/mder){ .md-button }
 
 ---
 
-## Why book-to-skill
+## Why mder
 
 <div class="grid cards" markdown>
 
@@ -63,41 +63,41 @@ Turn any book or document into a structured, on-demand agent skill — named fra
 
     ---
 
-    One `SKILL.md` runs on Claude Code, GitHub Copilot CLI, and Amp through the
+    One `SKILL.md` runs on Claude Code, Codex, and OpenCode through the
     open Agent Skills standard.
 
 </div>
 
 ## Install
 
-**As an agent skill** (gives you the `/book-to-skill` command in Claude Code, Copilot CLI, Amp):
+**As an agent skill** (gives you the `/mder` command in Claude Code, Codex, OpenCode):
 
 ```bash
-npx skills add virgiliojr94/book-to-skill
+npx skills add davidalecrim1/mder
 # or manually:
-git clone https://github.com/virgiliojr94/book-to-skill.git ~/.claude/skills/book-to-skill
+git clone https://github.com/davidalecrim1/mder.git ~/.claude/skills/mder
 # then, in your agent session:
-/book-to-skill /path/to/book.pdf [skill-name]
+/mder /path/to/book.pdf [skill-name]
 ```
 
 **As a standalone CLI** (just the text extractor, optional):
 
 ```bash
-pip install "book-to-skill[pdf,epub,docx]"
-book-to-skill /path/to/book.pdf --mode text
+pip install "mder[pdf,epub,docx]"
+mder /path/to/book.pdf --mode text
 ```
 
 ## Learn more
 
 <div class="grid cards" markdown>
 
--   :material-sitemap:{ .lg .middle } __[Architecture](architecture.md)__
+-   :material-sitemap:{ .lg .middle } __[Architecture](ARCHITECTURE.md)__
 
     ---
 
     How the deterministic extractor and the spec-driven generator fit together.
 
--   :material-speedometer:{ .lg .middle } __[Performance](performance.md)__
+-   :material-speedometer:{ .lg .middle } __[Performance](PERFORMANCE.md)__
 
     ---
 
@@ -108,11 +108,5 @@ book-to-skill /path/to/book.pdf --mode text
     ---
 
     The full `SKILL.md` spec: every step, depth budget, and quality rule.
-
--   :material-heart:{ .lg .middle } __[Sponsor](https://github.com/sponsors/virgiliojr94)__
-
-    ---
-
-    book-to-skill is free and MIT. Sponsoring funds reviews, releases, and fixes.
 
 </div>

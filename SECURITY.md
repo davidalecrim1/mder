@@ -2,7 +2,7 @@
 
 ## Scope
 
-book-to-skill is a local conversion tool. It reads document files you point it at
+mder is a local conversion tool. It reads document files you point it at
 and writes skill files to your skills directory. It does **not** upload your files,
 phone home, or run a network service. The main security surface is:
 
@@ -12,7 +12,7 @@ phone home, or run a network service. The main security surface is:
 
 ## Supported versions
 
-The latest released `1.x` version receives fixes. Please reproduce issues against
+The latest released version receives fixes. Please reproduce issues against
 the most recent tag before reporting.
 
 ## Reporting a vulnerability

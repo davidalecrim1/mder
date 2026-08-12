@@ -6,24 +6,24 @@ Severity:
   WARN   -> the host ignores it, or it's a soft guideline (does not fail CI)
 
 Lenses:
-  claude   — Claude Code rules (default; back-compat)
-  copilot  — GitHub Copilot CLI rules
-  amp      — Sourcegraph Amp rules
+  claude    — Claude Code rules (default; strictest)
+  codex     — OpenAI Codex rules
+  opencode  — OpenCode rules
 
 The SKILL.md format itself is an open standard
 (https://github.com/agentskills/agentskills) — `name` + `description` are the
 only universally-required fields. Lenses differ on which `allowed-tools` names
 are recognized and which extra frontmatter keys are accepted vs. silently
-ignored.
+ignored. Codex and OpenCode are permissive/MCP-oriented, so unrecognized
+tool tokens are a soft note there rather than an error.
 
 Refs:
   Claude     https://code.claude.com/docs/en/skills
              https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
-  Copilot    https://docs.github.com/en/copilot/concepts/agents/about-agent-skills
-             https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills
-  Amp        https://ampcode.com/manual#skills
+  Codex      https://github.com/openai/codex
+  OpenCode   https://opencode.ai
 
-Usage: python3 tools/validate_skill.py [--lens claude|copilot|amp] [path/to/SKILL.md]
+Usage: python3 tools/validate_skill.py [--lens claude|codex|opencode] [path/to/SKILL.md]
 """
 import argparse
 import re
@@ -45,13 +45,13 @@ CLAUDE_CODE_TOOLS = {
     "WebFetch", "WebSearch", "NotebookEdit", "Task", "TodoWrite",
 }
 
-# Copilot CLI recognized literal tool tokens. Anything else is assumed to be an
-# MCP-server name (free-form), which Copilot accepts — so unknown tokens get a
-# soft note, not an error.
-COPILOT_CLI_TOOLS = {"shell", "bash", "write"}
+# Codex runs shell commands through an exec/shell tool. Anything else is assumed
+# to be an MCP-server tool (free-form), which Codex accepts — so unknown tokens
+# get a soft note, not an error.
+CODEX_TOOLS = {"shell", "bash", "read", "write", "edit"}
 
-# Amp accepts Claude's tool names plus its own `shell_command` shorthand.
-AMP_TOOLS = CLAUDE_CODE_TOOLS | {"shell_command"}
+# OpenCode exposes lowercase built-in tools plus free-form MCP tools.
+OPENCODE_TOOLS = {"bash", "shell", "read", "write", "edit", "glob", "grep", "webfetch"}
 
 LENSES = {
     "claude": {
@@ -62,24 +62,25 @@ LENSES = {
         "bash_tool_names": {"Bash"},
         "unknown_tool_severity": "error",
     },
-    "copilot": {
-        "label": "GitHub Copilot CLI",
-        "tools": COPILOT_CLI_TOOLS,
-        "recognized_keys": {"name", "description", "allowed-tools", "license"},
-        "reserved_name_words": set(),
-        "bash_tool_names": {"shell", "bash"},
-        # Unknown tokens are likely MCP server names — Copilot accepts them.
-        "unknown_tool_severity": "warn",
-    },
-    "amp": {
-        "label": "Amp",
-        "tools": AMP_TOOLS,
+    "codex": {
+        "label": "Codex",
+        "tools": CODEX_TOOLS,
         "recognized_keys": {
-            "name", "description", "allowed-tools", "license",
-            "compatibility", "argument-hint",
+            "name", "description", "allowed-tools", "license", "argument-hint",
         },
         "reserved_name_words": set(),
-        "bash_tool_names": {"shell_command", "Bash"},
+        "bash_tool_names": {"shell", "bash"},
+        # Unknown tokens are likely MCP server tools — Codex accepts them.
+        "unknown_tool_severity": "warn",
+    },
+    "opencode": {
+        "label": "OpenCode",
+        "tools": OPENCODE_TOOLS,
+        "recognized_keys": {
+            "name", "description", "allowed-tools", "license", "argument-hint",
+        },
+        "reserved_name_words": set(),
+        "bash_tool_names": {"bash", "shell"},
         "unknown_tool_severity": "warn",
     },
 }
@@ -171,12 +172,12 @@ def audit(path, lens="claude"):
             )
         if not known and rules["tools"]:
             # Claude: hard error (none of the listed tools are recognized).
-            # Copilot/Amp: tokens are likely MCP names — handled by the warn path.
+            # Codex/OpenCode: tokens are likely MCP names — handled by the warn path.
             if rules["unknown_tool_severity"] == "error":
                 errors.append(f"allowed-tools: no recognized {label} tool in the list")
         if unknown:
             msg = (f"allowed-tools: {unknown} are not {label} built-in tool names "
-                   f"(treated as MCP-server names by Copilot, ignored by Claude)")
+                   f"(treated as MCP-server tools by Codex/OpenCode, ignored by Claude)")
             if rules["unknown_tool_severity"] == "error":
                 # Already covered by the 'no recognized tool' error if list is all-unknown;
                 # otherwise it's a soft note.

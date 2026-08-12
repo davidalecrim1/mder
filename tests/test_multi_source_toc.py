@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from book_to_skill.utils import main
+from mder.utils import main
 
 # Long enough that anything after it falls outside the 30k scan window.
 FILLER = "Filler prose about distributed systems. " * 1200
@@ -37,11 +37,11 @@ def _run(tmp_path, monkeypatch, *sources):
 
     out_dir = tmp_path / "out"
     out_meta = out_dir / "metadata.json"
-    monkeypatch.setenv("BOOK_SKILL_WORKDIR", str(out_dir))
-    monkeypatch.setattr("book_to_skill.utils.OUTPUT_DIR", out_dir)
-    monkeypatch.setattr("book_to_skill.utils.OUTPUT_TEXT", out_dir / "full_text.txt")
-    monkeypatch.setattr("book_to_skill.utils.OUTPUT_META", out_meta)
-    monkeypatch.setattr("book_to_skill.utils.prepare_dependencies", lambda *a: None)
+    monkeypatch.setenv("MDER_WORKDIR", str(out_dir))
+    monkeypatch.setattr("mder.utils.OUTPUT_DIR", out_dir)
+    monkeypatch.setattr("mder.utils.OUTPUT_TEXT", out_dir / "full_text.txt")
+    monkeypatch.setattr("mder.utils.OUTPUT_META", out_meta)
+    monkeypatch.setattr("mder.utils.prepare_dependencies", lambda *a: None)
     monkeypatch.setattr(
         "sys.argv", ["extract.py", *paths, "--install-missing", "no"]
     )

@@ -1,5 +1,5 @@
 """
-Test suite for the three PR blocker fixes + nits in the book_to_skill package.
+Test suite for the three PR blocker fixes + nits in the mder package.
 
 Covers:
   Fix #1 — EPUB extraction tuple-unpack regression
@@ -18,13 +18,13 @@ from unittest import mock
 import pytest
 
 # ---------------------------------------------------------------------------
-# Bootstrap: make sure the book_to_skill package is importable
+# Bootstrap: make sure the mder package is importable
 # ---------------------------------------------------------------------------
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from book_to_skill.exceptions import ExtractionError
-from book_to_skill.utils import (
+from mder.exceptions import ExtractionError
+from mder.utils import (
     resolve_input_files,
     extract_single_file,
     parse_arguments,
@@ -33,12 +33,12 @@ from book_to_skill.utils import (
     _cn_numeral_to_int,
     main,
 )
-from book_to_skill.config import SUPPORTED_EXTENSIONS
-from book_to_skill.parsers import pdf as pdf_parser
-from book_to_skill.parsers.text import read_text_file
-from book_to_skill.parsers.docx import extract_docx_with_zipfile
-from book_to_skill.parsers.rtf import strip_rtf_fallback
-from book_to_skill.parsers.epub import extract_with_zipfile
+from mder.config import SUPPORTED_EXTENSIONS
+from mder.parsers import pdf as pdf_parser
+from mder.parsers.text import read_text_file
+from mder.parsers.docx import extract_docx_with_zipfile
+from mder.parsers.rtf import strip_rtf_fallback
+from mder.parsers.epub import extract_with_zipfile
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -180,7 +180,7 @@ class TestEpubExtractionFix:
 
     def test_epub_extract_with_ebooklib_returns_str_or_none(self):
         """extract_with_ebooklib returns str|None, NOT a tuple."""
-        from book_to_skill.parsers.epub import extract_with_ebooklib
+        from mder.parsers.epub import extract_with_ebooklib
 
         # With ebooklib likely not installed in test env → returns None
         result = extract_with_ebooklib("nonexistent.epub")
@@ -193,7 +193,7 @@ class TestEpubExtractionFix:
         epub_path = _make_minimal_epub(tmp_path / "test.epub")
 
         # Mock prepare_dependencies to be a no-op
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(epub_path, "text", "no")
 
         assert result["format"] == "epub"
@@ -207,7 +207,7 @@ class TestEpubExtractionFix:
         epub_path = _make_minimal_epub(tmp_path / "test.epub")
 
         # Even if ebooklib is absent, this should NOT raise TypeError/ValueError
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             try:
                 result = extract_single_file(epub_path, "text", "no")
             except (TypeError, ValueError) as exc:
@@ -225,7 +225,7 @@ class TestEpubOpfRelativePaths:
 
     def test_zipfile_fallback_resolves_oebps_paths(self, tmp_path):
         """The core bug: hrefs in OPF are relative to OPF dir, not archive root."""
-        from book_to_skill.parsers.epub import extract_with_zipfile
+        from mder.parsers.epub import extract_with_zipfile
 
         epub_path = _make_oebps_epub(tmp_path / "oebps.epub")
         text = extract_with_zipfile(str(epub_path))
@@ -238,7 +238,7 @@ class TestEpubOpfRelativePaths:
         """End-to-end: extract_single_file should succeed with OEBPS layout."""
         epub_path = _make_oebps_epub(tmp_path / "test_oebps.epub")
 
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(epub_path, "text", "no")
 
         assert result["format"] == "epub"
@@ -248,7 +248,7 @@ class TestEpubOpfRelativePaths:
 
     def test_container_xml_locates_opf(self, tmp_path):
         """_find_opf_path should prefer META-INF/container.xml over globbing."""
-        from book_to_skill.parsers.epub import _find_opf_path
+        from mder.parsers.epub import _find_opf_path
 
         epub_path = _make_oebps_epub(tmp_path / "container.epub")
         with zipfile.ZipFile(epub_path) as zf:
@@ -258,7 +258,7 @@ class TestEpubOpfRelativePaths:
 
     def test_count_chapters_with_oebps(self, tmp_path):
         """count_epub_chapters should work with OPF in subdirectory."""
-        from book_to_skill.parsers.epub import count_epub_chapters
+        from mder.parsers.epub import count_epub_chapters
 
         epub_path = _make_oebps_epub(tmp_path / "chapters.epub")
         count = count_epub_chapters(str(epub_path))
@@ -266,7 +266,7 @@ class TestEpubOpfRelativePaths:
 
     def test_root_level_opf_still_works(self, tmp_path):
         """Regression check: root-level OPF (no subdirectory) should still work."""
-        from book_to_skill.parsers.epub import extract_with_zipfile
+        from mder.parsers.epub import extract_with_zipfile
 
         epub_path = _make_minimal_epub(tmp_path / "root_opf.epub")
         text = extract_with_zipfile(str(epub_path))
@@ -308,7 +308,7 @@ class TestBatchResilience:
 
         for fp in input_files:
             try:
-                with mock.patch("book_to_skill.utils.prepare_dependencies"):
+                with mock.patch("mder.utils.prepare_dependencies"):
                     res = extract_single_file(fp, "text", "no")
                 extracted.append(res)
             except ExtractionError as exc:
@@ -327,7 +327,7 @@ class TestBatchResilience:
             "sys.argv",
             ["extract.py", str(bad1), str(bad2), "--install-missing", "no"],
         )
-        monkeypatch.setattr("book_to_skill.utils.prepare_dependencies", lambda *a: None)
+        monkeypatch.setattr("mder.utils.prepare_dependencies", lambda *a: None)
 
         with pytest.raises(SystemExit) as exc_info:
             main()
@@ -340,7 +340,7 @@ class TestBatchResilience:
 
         # Point output to tmp
         out_dir = tmp_path / "output"
-        monkeypatch.setenv("BOOK_SKILL_WORKDIR", str(out_dir))
+        monkeypatch.setenv("MDER_WORKDIR", str(out_dir))
 
         monkeypatch.setattr(
             "sys.argv",
@@ -351,10 +351,10 @@ class TestBatchResilience:
         # So we patch the OUTPUT_* in utils directly
         out_text = out_dir / "full_text.txt"
         out_meta = out_dir / "metadata.json"
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_DIR", out_dir)
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_TEXT", out_text)
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_META", out_meta)
-        monkeypatch.setattr("book_to_skill.utils.prepare_dependencies", lambda *a: None)
+        monkeypatch.setattr("mder.utils.OUTPUT_DIR", out_dir)
+        monkeypatch.setattr("mder.utils.OUTPUT_TEXT", out_text)
+        monkeypatch.setattr("mder.utils.OUTPUT_META", out_meta)
+        monkeypatch.setattr("mder.utils.prepare_dependencies", lambda *a: None)
 
         main()
 
@@ -394,12 +394,12 @@ class TestBatchResilience:
             return result
 
         monkeypatch.setattr("sys.argv", ["extract.py", str(source), "--install-missing", "no"])
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_DIR", out_dir)
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_TEXT", out_text)
-        monkeypatch.setattr("book_to_skill.utils.OUTPUT_META", out_meta)
-        monkeypatch.setattr("book_to_skill.utils.prepare_dependencies", lambda *a: None)
+        monkeypatch.setattr("mder.utils.OUTPUT_DIR", out_dir)
+        monkeypatch.setattr("mder.utils.OUTPUT_TEXT", out_text)
+        monkeypatch.setattr("mder.utils.OUTPUT_META", out_meta)
+        monkeypatch.setattr("mder.utils.prepare_dependencies", lambda *a: None)
         monkeypatch.setattr(
-            "book_to_skill.utils.extract_single_file", extract_with_reported_source
+            "mder.utils.extract_single_file", extract_with_reported_source
         )
 
         main()
@@ -622,7 +622,7 @@ class TestDetectStructure:
     def test_thai_prose_is_not_a_chapter_heading(self):
         """`บทความ` (article) and `ตอนนี้` (now) start with the chapter words
         but are ordinary prose — they must not be treated as headings."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("บทความนี้ยาวมากและมีรายละเอียดเยอะ") is None
         assert _chapter_number("ตอนนี้เรามาดูกันว่าเกิดอะไรขึ้น") is None
@@ -650,13 +650,13 @@ class TestDetectStructure:
 
     def test_korean_article_is_not_chapter(self):
         """`제N조` (article) is not a chapter classifier — deliberately excluded."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("제56조 (연장·야간 및 휴일 근로)") is None
 
     def test_korean_prose_cross_reference_not_chapter(self):
         """Prose cross-references with particles are not headings."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("이 장과 제5장에서 정한 근로시간…") is None
         assert _chapter_number("제5장에서 정한 근로시간에 관한 규정은…") is None
@@ -675,7 +675,7 @@ class TestDetectStructure:
 
     def test_roman_footnote_reference_is_not_a_chapter(self):
         """Scholarly cross-references must stay rejected after the Roman change."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("V. § 19, note.") is None
         assert _chapter_number("VI. § 21:\u2014") is None
@@ -963,7 +963,7 @@ class TestMarkdownPrefixedLatinChapters:
     inflated chapters_detected."""
 
     def test_md_prefixed_latin_chapter_word(self):
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("## Chapter 1") == 1
         assert _chapter_number("## CHAPTER 5") == 5
@@ -973,13 +973,13 @@ class TestMarkdownPrefixedLatinChapters:
         assert _chapter_number("## Kapitel 3") == 3
 
     def test_asciidoc_prefixed_chapter_word(self):
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("== Chapter 1") == 1
         assert _chapter_number("=== Chapter 2") == 2
 
     def test_md_prefixed_roman_numeral(self):
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("## I. Loomings") == 1
         assert _chapter_number("## III: The Spouter-Inn") == 3
@@ -1004,7 +1004,7 @@ class TestMarkdownPrefixedLatinChapters:
         assert detect_structure(text)["chapters_detected"] == 3
 
     def test_md_prefixed_non_chapter_headings_still_rejected(self):
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
 
         assert _chapter_number("## Some Section") is None
         assert _chapter_number("## 5 Setup") is None
@@ -1024,7 +1024,7 @@ class TestTextExtraction:
     def test_extract_txt_file(self, tmp_path):
         txt = _make_text_file(tmp_path / "simple.txt", "Simple text content for testing.")
 
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(txt, "text", "no")
 
         assert result["format"] == "txt"
@@ -1034,7 +1034,7 @@ class TestTextExtraction:
     def test_extract_md_file(self, tmp_path):
         md = _make_md_file(tmp_path / "notes.md", "# My Notes\n\nSome notes here.")
 
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(md, "text", "no")
 
         assert result["format"] == "md"
@@ -1047,7 +1047,7 @@ class TestHtmlExtraction:
     def test_extract_html_file(self, tmp_path):
         html_file = _make_html_file(tmp_path / "page.html")
 
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(html_file, "text", "no")
 
         assert result["format"] == "html"
@@ -1061,7 +1061,7 @@ class TestDocxExtraction:
     def test_extract_docx_zipfile_fallback(self, tmp_path):
         docx = _make_minimal_docx(tmp_path / "test.docx")
 
-        with mock.patch("book_to_skill.utils.prepare_dependencies"):
+        with mock.patch("mder.utils.prepare_dependencies"):
             result = extract_single_file(docx, "text", "no")
 
         assert result["format"] == "docx"
@@ -1100,7 +1100,7 @@ class TestDocxExtraction:
         so `docx` is faked importable here to exercise the guard
         deterministically regardless of whether python-docx is actually
         installed in the environment running this test."""
-        from book_to_skill.parsers.docx import extract_docx_with_python_docx
+        from mder.parsers.docx import extract_docx_with_python_docx
 
         ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
         xml = textwrap.dedent(f"""\
@@ -1128,7 +1128,7 @@ class TestDocxExtraction:
         importable, extract_docx_with_python_docx() must return None (not
         raise, not scan the archive) -- it can't parse anything either way,
         malicious or not, so there's no protection to buy by validating."""
-        from book_to_skill.parsers.docx import extract_docx_with_python_docx
+        from mder.parsers.docx import extract_docx_with_python_docx
 
         real_import = __import__
 
@@ -1147,7 +1147,7 @@ class TestDocxExtraction:
 
     def test_extract_docx_xxe_rejection(self, tmp_path):
         """Verify that a DOCX with malicious DTD or entity declarations is rejected."""
-        from book_to_skill.parsers.docx import extract_docx
+        from mder.parsers.docx import extract_docx
         
         # Create a malicious DOCX
         ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -1178,7 +1178,7 @@ class TestDocxExtraction:
         double-scan (the whole archive, every .xml/.rels member, decoded
         across five candidate encodings) is exactly what the earlier review
         round asked to remove."""
-        from book_to_skill.parsers import docx as docx_module
+        from mder.parsers import docx as docx_module
 
         docx_path = _make_minimal_docx(tmp_path / "test.docx")
 
@@ -1235,10 +1235,10 @@ class TestDependencyCheck:
     """Tests for the --check preflight (run_dependency_check)."""
 
     def test_all_present_reports_ready(self, capsys):
-        from book_to_skill.dependencies import run_dependency_check
+        from mder.dependencies import run_dependency_check
 
-        with mock.patch("book_to_skill.dependencies.python_module_available", return_value=True), \
-             mock.patch("book_to_skill.dependencies.shutil.which", return_value="/usr/bin/tool"):
+        with mock.patch("mder.dependencies.python_module_available", return_value=True), \
+             mock.patch("mder.dependencies.shutil.which", return_value="/usr/bin/tool"):
             code = run_dependency_check()
 
         out = capsys.readouterr().out
@@ -1247,10 +1247,10 @@ class TestDependencyCheck:
         assert "✗" not in out
 
     def test_all_missing_lists_install_commands(self, capsys):
-        from book_to_skill.dependencies import run_dependency_check
+        from mder.dependencies import run_dependency_check
 
-        with mock.patch("book_to_skill.dependencies.python_module_available", return_value=False), \
-             mock.patch("book_to_skill.dependencies.shutil.which", return_value=None):
+        with mock.patch("mder.dependencies.python_module_available", return_value=False), \
+             mock.patch("mder.dependencies.shutil.which", return_value=None):
             code = run_dependency_check()
 
         out = capsys.readouterr().out
@@ -1265,13 +1265,13 @@ class TestDependencyCheck:
 
     def test_pdftotext_alone_satisfies_pdf_text(self, capsys):
         """pdftotext present (system) should mark PDF text-heavy ready even with no python PDF libs."""
-        from book_to_skill.dependencies import run_dependency_check
+        from mder.dependencies import run_dependency_check
 
         def which(cmd):
             return "/usr/bin/pdftotext" if cmd == "pdftotext" else None
 
-        with mock.patch("book_to_skill.dependencies.python_module_available", return_value=False), \
-             mock.patch("book_to_skill.dependencies.shutil.which", side_effect=which):
+        with mock.patch("mder.dependencies.python_module_available", return_value=False), \
+             mock.patch("mder.dependencies.shutil.which", side_effect=which):
             run_dependency_check()
 
         out = capsys.readouterr().out
@@ -1289,7 +1289,7 @@ class TestParserExceptionLogging:
 
     def test_pypdf_warns_on_unexpected_error_and_returns_none(self, tmp_path, capsys):
         """Monkeypatch pypdf import to raise; confirm None + stderr warning."""
-        from book_to_skill.parsers.pdf import extract_with_pypdf
+        from mder.parsers.pdf import extract_with_pypdf
 
         broken = tmp_path / "broken.pdf"
         broken.write_bytes(b"%PDF-1.4 fake")
@@ -1357,7 +1357,7 @@ class TestHtmlEntityDecoding:
 
     def _text(self, fragment):
         # Feed a raw fragment (no block tags) through a fresh stdlib parser.
-        from book_to_skill.parsers.html import _HTMLTextExtractor
+        from mder.parsers.html import _HTMLTextExtractor
         p = _HTMLTextExtractor()
         p.feed(fragment)
         return p.get_text()
@@ -1660,7 +1660,7 @@ class TestLooksImageOnly:
         assert pdf_parser.looks_image_only("scan.pdf") is False
 
     def test_extraction_fails_early_with_ocr_hint(self, monkeypatch, tmp_path):
-        from book_to_skill import utils
+        from mder import utils
 
         pdf = tmp_path / "scan.pdf"
         pdf.write_bytes(b"%PDF-1.4\n")
@@ -1732,7 +1732,7 @@ class TestLowercaseRomanNumerals:
 
     def test_bare_lowercase_not_confused_with_prose(self):
         """Lowercase roman 'i' alone or 'v.' page dividers are not chapters."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
         assert _chapter_number("i") is None
         assert _chapter_number("v.") is None
         assert _chapter_number("i.") is None
@@ -1760,7 +1760,7 @@ class TestLowercaseRomanNumerals:
     def test_roman_word_false_positives_in_markdown_heading(self):
         """Even in markdown headings, short lowercase-Roman words that are
         real words ('vi', 'cli') should be validated via round-trip."""
-        from book_to_skill.utils import _chapter_number
+        from mder.utils import _chapter_number
         assert _chapter_number("## vi: the editor") is not None  # legitimate Roman
         assert _chapter_number("## vi. editor") is not None
 
@@ -1774,26 +1774,26 @@ class TestCliHelp:
 
     @pytest.mark.parametrize("flag", ["--help", "-h"])
     def test_help_flag_prints_console_script_usage(self, flag, monkeypatch, capsys):
-        monkeypatch.setattr("sys.argv", ["book-to-skill", flag])
+        monkeypatch.setattr("sys.argv", ["mder", flag])
 
         with pytest.raises(SystemExit) as exc_info:
             main()
 
         captured = capsys.readouterr()
         assert exc_info.value.code == 0
-        assert "Usage: book-to-skill" in captured.err
+        assert "Usage: mder" in captured.err
         assert "extract.py" not in captured.err
         assert "Unknown flag" not in captured.err
 
     def test_no_arguments_keeps_error_exit_with_same_usage(self, monkeypatch, capsys):
-        monkeypatch.setattr("sys.argv", ["book-to-skill"])
+        monkeypatch.setattr("sys.argv", ["mder"])
 
         with pytest.raises(SystemExit) as exc_info:
             main()
 
         captured = capsys.readouterr()
         assert exc_info.value.code == 1
-        assert "Usage: book-to-skill" in captured.err
+        assert "Usage: mder" in captured.err
         assert "extract.py" not in captured.err
 
 

@@ -3,8 +3,8 @@ import stat
 
 import pytest
 
-from book_to_skill.exceptions import ExtractionError
-from book_to_skill.utils import prepare_output_dir
+from mder.exceptions import ExtractionError
+from mder.utils import prepare_output_dir
 
 
 def test_prepare_output_dir_creates_dir_with_restrictive_permissions(tmp_path):

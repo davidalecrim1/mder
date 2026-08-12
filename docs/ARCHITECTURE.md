@@ -1,51 +1,51 @@
 ---
-description: "How book-to-skill is built: a deterministic Python extractor plus a spec-driven agent generator. Pipeline, component map, and the design tradeoffs behind both."
-seo_title: "Architecture - How book-to-skill Extracts and Generates"
+description: "How mder is built: a deterministic Python extractor plus a spec-driven agent generator. Pipeline, component map, and the design tradeoffs behind both."
+seo_title: "Architecture - How mder Extracts and Generates"
 ---
 
 # Architecture
 
-book-to-skill has two halves: a **deterministic extractor** (Python) and a
+mder has two halves: a **deterministic extractor** (Python) and a
 **spec-driven generator** (the agent following `SKILL.md`). The extractor turns any
 document into clean text + metadata; the agent turns that into a structured skill.
 
 ```
             ┌─────────────────────────── EXTRACTOR (Python, deterministic) ──┐
- documents  │  scripts/extract.py (shim)  →  book_to_skill/                   │
+ documents  │  scripts/extract.py (shim)  →  mder/                   │
  (pdf/epub/ │    ├─ cli.py · utils.py   CLI parse · multi-source · runner     │
   docx/...) │    ├─ config.py           supported extensions · paths · deps   │
      │      │    ├─ dependencies.py     optional-dep probing · --check report │
      ▼      │    ├─ sanitize.py         strip invisible/zero-width Unicode    │
  ───────────│    └─ parsers/            pdf · epub · docx · html · rtf ·      │
             │                             calibre · text (best tool, fallback)│
-            │  output → <tempdir>/book_skill_work/                            │
+            │  output  <tempdir>/mder_work/                            │
             │    full_text.txt   (all sources merged, source-marked)          │
-            │    metadata.json   (pages, words, tokens, chapters, ToC)        │
+            │    metadata.json   (pages, words, tokens, chapters[], ToC)      │
+            │    chapters/*.md   (verbatim raw slice, one per chapter)        │
             └────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
             ┌─────────────────────────── GENERATOR (agent, follows SKILL.md) ┐
-            │  Step 1.5  ask content type → BOOK_TYPE (technical | text)      │
+            │  Step 1.5  ask content type  BOOK_TYPE (technical | text)      │
             │  Step 2/2.5 extract · cost estimate · confirm                   │
             │  Step 2.6  REPL-style probing for large books (grep/sed, no     │
             │            full re-reads)                                        │
             │  Step 3    analyze structure (title, author, chapters, ToC)     │
-            │  Step 4    purpose → DEPTH (reference | study)                   │
+            │  Step 4    purpose  DEPTH (reference | study)                   │
+            │  Step 6    copy raw slices → chapters/raw/                       │
             │  Step 7    per-chapter summaries (budget = BOOK_TYPE × DEPTH)    │
             │  Step 8    glossary · patterns · cheatsheet (decision layer)    │
             │  Step 9/9.5 SKILL.md core + indexes                             │
             └────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
-                <SKILLS_HOME>/<slug>/  ← chosen per host:
-                  ~/.copilot/skills/   GitHub Copilot CLI
-                  ~/.agents/skills/    Copilot CLI or Amp (cross-agent)
-                  ~/.claude/skills/    Claude Code
-                  .github|.claude|.agents/skills/  project-local
-                  SKILL.md         core frameworks + chapter & topic index (~4K)
-                  chapters/*.md    on-demand, loaded only when asked
-                  glossary.md      terms
-                  patterns.md      techniques
+                <output>/<slug>/   (--output, default ~/.mder/ — a plain
+                                    folder, not a skills root)
+                  SKILL.md             core frameworks + chapter & topic index (~4K)
+                  chapters/summary/*.md  distilled, on-demand, loaded only when asked
+                  chapters/raw/*.md      verbatim source text, paired 1:1 by filename
+                  glossary.md          terms
+                  patterns.md          techniques
                   cheatsheet.md    decision rules / trees / trade-offs / tells
 ```
 
@@ -54,8 +54,8 @@ document into clean text + metadata; the agent turns that into a structured skil
 1. **Extract structure, not summaries** — named frameworks, decision rules,
    anti-patterns; never raw passages.
 2. **Compile-time over runtime** — pay navigation/structuring once; at query time
-   load only the relevant chapter. See [Performance & Cost](performance.md).
-3. **On-demand chapters** — `SKILL.md` stays small; chapter files cost tokens only
+   load only the relevant chapter. See [Performance & Cost](PERFORMANCE.md).
+3. **On-demand chapters** — `SKILL.md` stays small; summary files cost tokens only
    when read.
 4. **Front-loaded `SKILL.md`** — most important content first (compaction truncates
    from the end).
@@ -66,24 +66,24 @@ document into clean text + metadata; the agent turns that into a structured skil
 
 | Path | Responsibility |
 |------|----------------|
-| `scripts/extract.py` | thin entrypoint shim → `book_to_skill.cli` (kept so old invocations keep working) |
-| `book_to_skill/cli.py`, `utils.py` | CLI parsing, multi-source resolution, chapter/ToC detection, runner |
-| `book_to_skill/parsers/` | one module per format (`pdf`, `epub`, `docx`, `html`, `rtf`, `calibre`, `text`) |
-| `book_to_skill/config.py` | supported extensions, output paths, dependency map |
-| `book_to_skill/dependencies.py` | optional-dependency probing + `--check` |
-| `book_to_skill/sanitize.py` | strips zero-width / Unicode-tag-block characters from extracted text (see Security) |
+| `scripts/extract.py` | thin entrypoint shim  `mder.cli` (kept so old invocations keep working) |
+| `mder/cli.py`, `utils.py` | CLI parsing, multi-source resolution, chapter/ToC detection, runner |
+| `mder/parsers/` | one module per format (`pdf`, `epub`, `docx`, `html`, `rtf`, `calibre`, `text`) |
+| `mder/config.py` | supported extensions, output paths, dependency map |
+| `mder/dependencies.py` | optional-dependency probing + `--check` |
+| `mder/sanitize.py` | strips zero-width / Unicode-tag-block characters from extracted text (see Security) |
 | `tools/discovery_tax.py` | measures token cost vs context-dump / discovery loop |
-| `tools/validate_skill.py` | checks a generated SKILL.md against host rules (`--lens claude\|copilot\|amp`) |
+| `tools/validate_skill.py` | checks a generated SKILL.md against host rules (`--lens claude\|codex\|opencode`) |
 | `tools/scan_generated_skill.py` | advisory prompt-injection scan of a generated skill (see Security) |
 | `SKILL.md` | the generator spec (Steps 0–10 + fold-in workflow) |
 
 ## Security
 
 Untrusted documents flow into an agent's context and then into a generated skill
-that later loads into other agents — a document→context supply chain. The hardening
+that later loads into other agents — a documentcontext supply chain. The hardening
 is layered:
 
-- **Extraction sanitization** (`book_to_skill/sanitize.py`) — strips zero-width
+- **Extraction sanitization** (`mder/sanitize.py`) — strips zero-width
   (`U+200B/200C/200D/2060/FEFF`) and the Unicode tag block (`U+E0000–E007F`) from
   every parser's output before metrics or `full_text.txt`, so invisible
   document-borne instructions never reach the agent. Reports the removal count;
@@ -103,8 +103,8 @@ is layered:
 
 ## Extending
 
-- **New format** → add `book_to_skill/parsers/<fmt>.py`, register its extension in
+- **New format**  add `mder/parsers/<fmt>.py`, register its extension in
   `config.py`, wire dependency probing in `dependencies.py`, branch in
   `utils.extract_single_file`.
-- **New generation behavior** → edit the relevant Step in `SKILL.md`; keep it lean
+- **New generation behavior**  edit the relevant Step in `SKILL.md`; keep it lean
   and back the change with evidence (see CONTRIBUTING.md).

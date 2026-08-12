@@ -4,26 +4,60 @@ import posixpath
 import re
 import zipfile
 import sys
-from book_to_skill.parsers.html import _HTMLTextExtractor
+from mder.parsers.html import _HTMLTextExtractor
 
 
-def extract_with_ebooklib(epub_path: str) -> str | None:
+def extract_sections_with_ebooklib(epub_path: str) -> list[str] | None:
+    """Return one text block per spine document, in reading order.
+
+    Iterating the spine (not `get_items_of_type`) preserves the book's own
+    reading order, so each block corresponds to a table-of-contents section.
+    """
     try:
         import ebooklib
         from ebooklib import epub
         from bs4 import BeautifulSoup
 
         book = epub.read_epub(epub_path)
-        parts = []
+        by_id = {item.get_id(): item for item in book.get_items()}
+        sections: list[str] = []
+        used: set = set()
+        seen_text: set = set()
+
+        def _add(item):
+            text = BeautifulSoup(item.get_content(), "html.parser").get_text(
+                separator="\n"
+            )
+            fingerprint = " ".join(text.split())  # ignore whitespace differences
+            if fingerprint and fingerprint not in seen_text:
+                seen_text.add(fingerprint)
+                sections.append(text)
+
+        for entry in book.spine:
+            idref = entry[0] if isinstance(entry, (list, tuple)) else entry
+            item = by_id.get(idref)
+            if item is None or item.get_type() != ebooklib.ITEM_DOCUMENT:
+                continue
+            _add(item)
+            used.add(idref)
+        # Safety net: append any content document not referenced by the spine, so
+        # a malformed or unusual EPUB never loses text. Prioritising completeness
+        # over de-duplication — `_add` only skips byte-identical repeats, so an
+        # extra copy of a section is preferred to any risk of a cut-off chapter.
         for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-            soup = BeautifulSoup(item.get_content(), "html.parser")
-            parts.append(soup.get_text(separator="\n"))
-        return "\n\n".join(parts)
+            if item.get_id() not in used:
+                _add(item)
+        return sections or None
     except ImportError:
         return None
     except Exception as e:
         print(f"  [warn] extract_with_ebooklib failed: {type(e).__name__}: {e}", file=sys.stderr)
         return None
+
+
+def extract_with_ebooklib(epub_path: str) -> str | None:
+    sections = extract_sections_with_ebooklib(epub_path)
+    return "\n\n".join(sections) if sections else None
 
 
 def _find_opf_path(zf: zipfile.ZipFile) -> str | None:
@@ -47,7 +81,13 @@ def _find_opf_path(zf: zipfile.ZipFile) -> str | None:
 
 
 def extract_with_zipfile(epub_path: str) -> str | None:
-    """stdlib-only EPUB extractor: unzip → parse HTML files."""
+    sections = extract_sections_with_zipfile(epub_path)
+    return "\n\n".join(sections) if sections else None
+
+
+def extract_sections_with_zipfile(epub_path: str) -> list[str] | None:
+    """stdlib-only EPUB extractor: unzip → parse HTML files in spine order,
+    returning one text block per document (a table-of-contents section)."""
     try:
         with zipfile.ZipFile(epub_path) as zf:
             names = zf.namelist()
@@ -105,7 +145,7 @@ def extract_with_zipfile(epub_path: str) -> str | None:
                     parts.append(parser.get_text())
                 except Exception:
                     continue
-            return "\n\n".join(parts) if parts else None
+            return parts or None
     except Exception as e:
         print(f"  [warn] extract_with_zipfile failed: {type(e).__name__}: {e}", file=sys.stderr)
         return None

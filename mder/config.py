@@ -4,12 +4,14 @@ from pathlib import Path
 
 OUTPUT_DIR = Path(
     os.environ.get(
-        "BOOK_SKILL_WORKDIR",
-        str(Path(tempfile.gettempdir()) / "book_skill_work"),
+        "MDER_WORKDIR",
+        str(Path(tempfile.gettempdir()) / "mder_work"),
     )
 )
 OUTPUT_TEXT = OUTPUT_DIR / "full_text.txt"
 OUTPUT_META = OUTPUT_DIR / "metadata.json"
+# Deterministic per-chapter raw slices of full_text.txt (see split_into_chapters).
+CHAPTERS_DIR = OUTPUT_DIR / "chapters"
 
 WORDS_PER_TOKEN = 0.75  # approximate (Latin / whitespace-delimited text)
 # CJK scripts carry little or no whitespace, so word-splitting under-counts them

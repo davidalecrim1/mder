@@ -20,8 +20,8 @@ import pytest
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from book_to_skill.exceptions import ExtractionError  # noqa: E402
-from book_to_skill.utils import extract_single_file, main  # noqa: E402
+from mder.exceptions import ExtractionError  # noqa: E402
+from mder.utils import extract_single_file, main  # noqa: E402
 
 
 def _make_unreadable(path: Path) -> Path:
@@ -57,11 +57,11 @@ def test_batch_survives_unreadable_source(tmp_path, monkeypatch, capsys):
     good.write_text("Chapter 1\nReal content.\n", encoding="utf-8")
 
     workdir = tmp_path / "work"
-    monkeypatch.setenv("BOOK_SKILL_WORKDIR", str(workdir))
+    monkeypatch.setenv("MDER_WORKDIR", str(workdir))
     # config caches OUTPUT_* at import time; point the module constants at the
     # temp workdir so the run does not touch the shared default.
-    import book_to_skill.config as config
-    import book_to_skill.utils as utils
+    import mder.config as config
+    import mder.utils as utils
 
     for module in (config, utils):
         monkeypatch.setattr(module, "OUTPUT_DIR", workdir, raising=False)

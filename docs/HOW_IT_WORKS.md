@@ -1,11 +1,10 @@
 ---
-description: "The full book-to-skill walkthrough, Steps 0-10: document extraction, chapter detection, framework mining, depth budgets, and how the agent skill gets assembled."
-seo_title: "How book-to-skill Works - Book to Agent Skill, Step by Step"
+description: "The full mder walkthrough, Steps 0-10: document extraction, chapter detection, framework mining, depth budgets, and how the agent skill gets assembled."
+seo_title: "How mder Works - Book to Agent Skill, Step by Step"
 ---
 
-<img align="right" width="180" src="assets/booklin-casting.png" alt="Booklin casting book-to-skill magic">
 
-## ⚙️ How it works
+## How it works
 
 ```
 One file · a folder · a glob · a list of paths
@@ -21,8 +20,8 @@ scripts/extract.py <paths…> --mode <technical|text>
   per source: PDF → pdftotext/Docling · EPUB → ebooklib → stdlib zipfile · DOCX/HTML/RTF/…
   (one bad source is skipped with a warning; the rest still process)
      │
-     ├── /tmp/book_skill_work/full_text.txt   (all sources merged, with source markers)
-     └── /tmp/book_skill_work/metadata.json   (aggregated stats + per-source array)
+     ├── /tmp/mder_work/full_text.txt   (all sources merged, with source markers)
+     └── /tmp/mder_work/metadata.json   (aggregated stats + per-source array)
                │
                ▼
           Claude analyzes structure
@@ -30,17 +29,16 @@ scripts/extract.py <paths…> --mode <technical|text>
           ── or, if targeting an existing skill: folds new content in (Mode 4)
                │
                ▼
-          Generates per-chapter summaries  (800–1,200 tokens each)
+          Copies raw slices → chapters/raw/  (verbatim, zero-token file copy)
+          Generates per-chapter summaries → chapters/summary/  (800–1,200 tokens each)
           technical → includes Code Examples + Reference Tables sections
           Generates glossary, patterns, cheatsheet
           Generates master SKILL.md with core mental models
                │
                ▼
-          Skill written to one of:
-            ~/.copilot/skills/<slug>/   (GitHub Copilot CLI)
-            ~/.agents/skills/<slug>/    (Copilot CLI or Amp, cross-agent)
-            ~/.claude/skills/<slug>/    (Claude Code)
-          /tmp/book_skill_work/         🗑️  cleaned up
+          Folder written to <output>/<slug>/  (--output, default ~/.mder/)
+            SKILL.md · chapters/summary/ · chapters/raw/ · glossary · patterns · cheatsheet
+          /tmp/mder_work/           cleaned up
 ```
 
 **Extraction benchmark** (103-page technical book, CPU only):
@@ -82,4 +80,4 @@ PDF every session.
 
 ---
 
-[← Back to the README](../README.md)
+[ Back to the README](../README.md)

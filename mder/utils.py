@@ -6,15 +6,17 @@ import os
 import re
 import sys
 import shutil
+import unicodedata
 import zipfile
 from pathlib import Path
 
-from book_to_skill.exceptions import ExtractionError
+from mder.exceptions import ExtractionError
 
-from book_to_skill.config import (
+from mder.config import (
     OUTPUT_DIR,
     OUTPUT_TEXT,
     OUTPUT_META,
+    CHAPTERS_DIR,
     WORDS_PER_TOKEN,
     CJK_CHARS_PER_TOKEN,
     SUPPORTED_EXTENSIONS,
@@ -23,17 +25,17 @@ from book_to_skill.config import (
     CALIBRE_EBOOK_EXTENSIONS,
     supported_formats_message,
 )
-from book_to_skill.dependencies import (
+from mder.dependencies import (
     normalize_install_mode,
     prepare_dependencies,
     run_dependency_check,
 )
-from book_to_skill.parsers.text import read_text_file
-from book_to_skill.parsers.html import extract_html_file
-from book_to_skill.parsers.docx import extract_docx
-from book_to_skill.parsers.rtf import extract_rtf
-from book_to_skill.parsers.calibre import extract_with_ebook_convert
-from book_to_skill.parsers.pdf import (
+from mder.parsers.text import read_text_file
+from mder.parsers.html import extract_html_file
+from mder.parsers.docx import extract_docx
+from mder.parsers.rtf import extract_rtf
+from mder.parsers.calibre import extract_with_ebook_convert
+from mder.parsers.pdf import (
     extract_with_docling,
     extract_with_pdftotext,
     extract_with_pypdf,
@@ -41,12 +43,14 @@ from book_to_skill.parsers.pdf import (
     looks_image_only,
     count_pages,
 )
-from book_to_skill.parsers.epub import (
+from mder.parsers.epub import (
     extract_with_ebooklib,
     extract_with_zipfile,
+    extract_sections_with_ebooklib,
+    extract_sections_with_zipfile,
     count_epub_chapters,
 )
-from book_to_skill.sanitize import sanitize_extracted_text
+from mder.sanitize import sanitize_extracted_text
 
 
 # CJK codepoints: ideographs + extensions, kana, hangul, CJK punctuation, and
@@ -334,29 +338,55 @@ def _roman_to_int(s: str) -> int | None:
     return total if _int_to_roman(total) == s else None
 
 
-def _match_chapter_number(line: str) -> int | None:
-    """Return the chapter number if the line is a genuine chapter heading,
-    with no Markdown/AsciiDoc heading prefix (the caller strips it first)."""
+def _match_chapter_key(line: str) -> tuple[str, int] | None:
+    """Return (kind, number) if the line is a genuine chapter heading, with no
+    Markdown/AsciiDoc heading prefix (the caller strips it first).
+
+    `kind` distinguishes numbering schemes that can share a numeral — an explicit
+    "Chapter 4" ("chapter") vs a bare Roman part heading "IV." ("roman") — so
+    callers can treat them as distinct sections instead of collapsing them.
+    """
     s = line.strip()
     if len(s) > 80:
         return None
     m = _EXPLICIT_CHAPTER.match(s)
     if m and _HEADING_TAIL.match(m.group("rest")):
         if m.group(1):
-            return int(m.group(1))
-        return _roman_to_int(m.group("roman").upper())
+            return ("chapter", int(m.group(1)))
+        return ("chapter", _roman_to_int(m.group("roman").upper()))
     rm = _ROMAN_HEAD.match(s) or _LC_MD_ROMAN.match(s)
     if rm:
-        return _roman_to_int(rm.group(1))
+        num = _roman_to_int(rm.group(1))
+        return ("roman", num) if num is not None else None
     cm = _CN_CHAPTER.match(s) or _MD_CN_HEADING.match(s)
     if cm:
-        return _cn_numeral_to_int(cm.group(1))
+        num = _cn_numeral_to_int(cm.group(1))
+        return ("cn", num) if num is not None else None
     tm = _TH_CHAPTER.match(s)
     if tm:
-        return int(tm.group(1).translate(_TH_DIGIT_MAP))
+        return ("th", int(tm.group(1).translate(_TH_DIGIT_MAP)))
     km = _KO_CHAPTER.match(s)
     if km:
-        return int(km.group(1))
+        return ("ko", int(km.group(1)))
+    return None
+
+
+def _chapter_key(line: str) -> tuple[str, int] | None:
+    """(kind, number) for a chapter heading, tolerating a Markdown/AsciiDoc
+    prefix ("## Chapter 1"). See _match_chapter_key and _chapter_number."""
+    match = _match_chapter_key(line)
+    if match is not None:
+        return match
+    # Second pass: a Markdown/AsciiDoc heading prefix ("## Chapter 1",
+    # "== Section") hides the heading from the matchers above — the CJK
+    # matchers tolerate the prefix inline but the Latin/Thai/Korean ones anchor
+    # on the line start. Strip the prefix and retry so --mode technical
+    # (Docling emits headings as Markdown) detects the same chapters as
+    # plain-text extraction. (Issue #91)
+    s = line.strip()
+    md = _MD_HEADING_PREFIX.match(s)
+    if md:
+        return _match_chapter_key(s[md.end():])
     return None
 
 
@@ -370,20 +400,8 @@ def _chapter_number(line: str) -> int | None:
     heading styles — each optionally preceded by a Markdown/AsciiDoc heading
     marker ("## Chapter 1" is a chapter heading just like "Chapter 1").
     """
-    match = _match_chapter_number(line)
-    if match is not None:
-        return match
-    # Second pass: a Markdown/AsciiDoc heading prefix ("## Chapter 1",
-    # "== Section") hides the heading from the matchers above — the CJK
-    # matchers tolerate the prefix inline but the Latin/Thai/Korean ones anchor
-    # on the line start. Strip the prefix and retry so --mode technical
-    # (Docling emits headings as Markdown) detects the same chapters as
-    # plain-text extraction. (Issue #91)
-    s = line.strip()
-    md = _MD_HEADING_PREFIX.match(s)
-    if md:
-        return _match_chapter_number(s[md.end():])
-    return None
+    key = _chapter_key(line)
+    return key[1] if key is not None else None
 
 
 def detect_structure(text: str) -> dict:
@@ -418,6 +436,207 @@ def detect_structure(text: str) -> dict:
         "chapter_headings_sample": headings[:10],
         "has_toc": has_toc,
     }
+
+
+# Segments shorter than this (a heading with almost no body) are treated as
+# table-of-contents / list entries rather than real chapters, and dropped.
+MIN_CHAPTER_CHARS = 400
+
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(title: str, max_len: int = 60) -> str:
+    """Filesystem-safe slug: lowercase ASCII, non-alphanumerics collapsed to
+    hyphens. Accents are folded (café -> cafe); scripts with no ASCII form
+    (e.g. CJK) yield an empty slug, so callers fall back to the index."""
+    ascii_str = (
+        unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
+    )
+    slug = _SLUG_STRIP.sub("-", ascii_str.lower()).strip("-")
+    if len(slug) > max_len:
+        slug = slug[:max_len].rstrip("-")
+    return slug
+
+
+def _chapter_boundaries(lines: list[str]) -> list[tuple[int, tuple | None, str]]:
+    """Return (line_index, key, title) for each heading line, where `key` is the
+    (kind, number) identity used to collapse repeats of the same section.
+
+    Numeric "Chapter N" style headings take priority (reusing the same detector
+    as detect_structure). When a document has none, fall back to structural
+    ATX/setext Markdown headings so prose-only Markdown still splits; those get a
+    unique per-line key so they are never treated as duplicates.
+    """
+    numeric = []
+    for i, line in enumerate(lines):
+        key = _chapter_key(line)
+        if key is not None:
+            numeric.append((i, key, line.strip()))
+    if numeric:
+        return numeric
+
+    fenced = _closed_fence_line_numbers(lines)
+    structural: list[tuple[int, tuple | None, str]] = []
+    prev = ""
+    for i, line in enumerate(lines):
+        if i in fenced:
+            prev = ""
+            continue
+        s = line.strip()
+        if (
+            _SETEXT_UNDERLINE.match(s)
+            and prev
+            and not _SETEXT_UNDERLINE.match(prev)
+            and len(s) >= len(prev)
+        ):
+            structural.append((i - 1, ("struct", i), prev))
+            prev = ""
+            continue
+        m = _ATX_HEADING.match(s)
+        if m:
+            title = m.group(2).strip()
+            if title and not title[0].isdigit() and re.search(r"\w", title):
+                structural.append((i, ("struct", i), title))
+            prev = ""
+            continue
+        prev = s
+    return structural
+
+
+def split_into_chapters(text: str) -> list[dict]:
+    """Slice extracted text into per-chapter raw segments.
+
+    Deterministic and verbatim: each returned segment's `text` is an exact slice
+    of `text`, so the raw chapter files reproduce the source. Boundaries come
+    from _chapter_boundaries; ToC/list stubs (below MIN_CHAPTER_CHARS) are
+    dropped, and when a chapter number appears twice (a ToC entry plus its real
+    body) the longest occurrence wins. Any text before the first heading becomes
+    a front-matter segment.
+    """
+    lines = text.splitlines()
+    keep = text.splitlines(keepends=True)
+    offsets, pos = [], 0
+    for ln in keep:
+        offsets.append(pos)
+        pos += len(ln)
+
+    boundaries = _chapter_boundaries(lines)
+
+    segments: list[dict] = []
+    first_line = boundaries[0][0] if boundaries else len(offsets)
+    front = text[: offsets[first_line]] if first_line < len(offsets) else text
+    if front.strip() and len(front.strip()) >= MIN_CHAPTER_CHARS // 2:
+        segments.append({"number": 0, "title": "Front Matter", "text": front})
+
+    raw = []
+    for idx, (line_i, key, title) in enumerate(boundaries):
+        start = offsets[line_i]
+        end = offsets[boundaries[idx + 1][0]] if idx + 1 < len(boundaries) else len(text)
+        number = key[1] if key and key[0] != "struct" else None
+        raw.append(
+            {"key": key, "number": number, "title": title,
+             "text": text[start:end], "start": start}
+        )
+
+    # A table of contents is a run of headings with near-empty bodies; the real
+    # chapters carry substantial text. Dropping sub-threshold segments removes the
+    # ToC while preserving body order.
+    kept = [seg for seg in raw if len(seg["text"].strip()) >= MIN_CHAPTER_CHARS]
+    if not kept and raw:  # tiny doc: every segment is short — keep them all
+        kept = raw
+
+    # The same section can recur — a ToC entry, the body, and a per-chapter
+    # endnotes block all repeat "Chapter 4", and a bare "Chapter 19" can appear
+    # early as a cross-reference. Collapse by (kind, number) identity, keeping the
+    # longest occurrence (the body). Roman-numeral parts ("roman", 4) stay
+    # distinct from Arabic chapters ("chapter", 4); structural headings carry a
+    # unique key so they never merge. Final order follows each winning segment's
+    # own position, so a chapter lands where its body is, not where it was first
+    # name-dropped.
+    best: dict[tuple, dict] = {}
+    for seg in kept:
+        k = seg["key"] if seg["key"] is not None else ("_frag", id(seg))
+        if k not in best or len(seg["text"]) > len(best[k]["text"]):
+            best[k] = seg
+    segments.extend(sorted(best.values(), key=lambda s: s["start"]))
+
+    out = []
+    for i, seg in enumerate(segments):
+        body = seg["text"].strip("\n")
+        out.append(
+            {
+                "index": f"ch{i:02d}",
+                "number": seg["number"],
+                "title": seg["title"],
+                "slug": slugify(seg["title"]),
+                "text": body,
+                "chars": len(body),
+                "words": len(body.split()),
+            }
+        )
+    return out
+
+
+def _section_title(text: str, max_words: int = 12) -> str:
+    """Derive a chapter title from a section's own text: its first non-empty
+    line, extended with the following line when the first is a bare chapter
+    number ("Chapter 9" -> "Chapter 9 Surgeons Should Not Look Like Surgeons")
+    so the slug is identifiable."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return "section"
+    title = lines[0]
+    if len(title) <= 15 and len(lines) > 1 and _chapter_key(title) is not None:
+        title = f"{title} {lines[1]}"
+    return " ".join(title.split()[:max_words])
+
+
+def sections_to_chapters(sections: list[str]) -> list[dict]:
+    """Build the chapter list from pre-split structural sections (e.g. EPUB
+    spine documents / ToC entries). Each non-empty section becomes one flat
+    chapter, kept verbatim — no heading-guessing, so a chapter is never cut off
+    at a false boundary. The slug comes from the section's own title."""
+    out: list[dict] = []
+    for sec in sections:
+        body = sec.strip("\n")
+        if not body.strip():
+            continue
+        title = _section_title(body)
+        out.append(
+            {
+                "index": f"ch{len(out):02d}",
+                "number": None,
+                "title": title,
+                "slug": slugify(title),
+                "text": body,
+                "chars": len(body),
+                "words": len(body.split()),
+            }
+        )
+    return out
+
+
+def write_chapter_files(chapters: list[dict], chapters_dir: Path) -> list[dict]:
+    """Write each raw chapter to `<chapters_dir>/<index>-<slug>.md` and return the
+    metadata entries. Clears any stale files from a previous run first."""
+    shutil.rmtree(chapters_dir, ignore_errors=True)
+    chapters_dir.mkdir(parents=True, exist_ok=True)
+    meta = []
+    for ch in chapters:
+        fname = f"{ch['index']}-{ch['slug']}.md" if ch["slug"] else f"{ch['index']}.md"
+        (chapters_dir / fname).write_text(ch["text"] + "\n", encoding="utf-8")
+        meta.append(
+            {
+                "index": ch["index"],
+                "number": ch["number"],
+                "title": ch["title"],
+                "slug": ch["slug"],
+                "file": f"chapters/{fname}",
+                "chars": ch["chars"],
+                "words": ch["words"],
+            }
+        )
+    return meta
 
 
 def parse_arguments(argv: list[str]) -> tuple[list[str], str, str]:
@@ -576,17 +795,18 @@ def extract_single_file(input_path: Path, extraction_mode: str, install_mode: st
     method = ""
     pages = 0
     pages_label = "sections"
-    
+    sections = None  # per-ToC-section text blocks, when the format exposes them
+
     if ext == ".epub":
         print(f"Extracting EPUB: {input_str}")
-        text = extract_with_ebooklib(input_str)
-        if text and text.strip():
+        sections = extract_sections_with_ebooklib(input_str)
+        if sections:
             method = "ebooklib"
         else:
             print("ebooklib not available")
             print("Trying stdlib zipfile parser...", end=" ", flush=True)
-            text = extract_with_zipfile(input_str)
-            if text and text.strip():
+            sections = extract_sections_with_zipfile(input_str)
+            if sections:
                 print("OK")
                 method = "zipfile"
             else:
@@ -596,6 +816,7 @@ def extract_single_file(input_path: Path, extraction_mode: str, install_mode: st
                     "Install ebooklib + beautifulsoup4 for best results:\n"
                     "  pip3 install ebooklib beautifulsoup4"
                 )
+        text = "\n\n".join(sections)
         pages = count_epub_chapters(input_str)
         pages_label = "spine_items"
     elif ext == ".pdf":
@@ -701,6 +922,10 @@ def extract_single_file(input_path: Path, extraction_mode: str, install_mode: st
             f"Extracted text from {input_path.name} contained no visible content "
             "after Unicode sanitization."
         )
+    # Sanitize the per-section blocks too — they are written verbatim as raw
+    # chapter files, so invisible/injection code points must be stripped there.
+    if sections:
+        sections = [sanitize_extracted_text(s)[0] for s in sections]
 
     tokens = estimate_tokens(text)
     structure = detect_structure(text)
@@ -719,6 +944,7 @@ def extract_single_file(input_path: Path, extraction_mode: str, install_mode: st
         "words": len(text.split()),
         "estimated_tokens": tokens,
         "text": text,
+        "sections": sections,
         **structure,
     }
 
@@ -732,7 +958,7 @@ def prepare_output_dir(path: Path) -> None:
     if path.is_symlink():
         raise ExtractionError(
             f"Refusing to use {path}: it is a symbolic link, not a real "
-            "directory. Remove it or set BOOK_SKILL_WORKDIR to a private path."
+            "directory. Remove it or set MDER_WORKDIR to a private path."
         )
     if path.exists():
         if not path.is_dir():
@@ -742,7 +968,7 @@ def prepare_output_dir(path: Path) -> None:
             if owner_uid != os.getuid():
                 raise ExtractionError(
                     f"Refusing to use {path}: it is owned by a different user "
-                    f"(uid {owner_uid}). Set BOOK_SKILL_WORKDIR to a private directory."
+                    f"(uid {owner_uid}). Set MDER_WORKDIR to a private directory."
                 )
             os.chmod(path, 0o700)
     else:
@@ -762,12 +988,12 @@ def print_banner() -> None:
 def print_usage() -> None:
     """Print standalone CLI usage."""
     print(
-        "Usage: book-to-skill <path-to-document-folder-or-glob>... "
+        "Usage: mder <path-to-document-folder-or-glob>... "
         "[--mode technical|text] [--install-missing ask|yes|no]",
         file=sys.stderr,
     )
     print(
-        "       book-to-skill --check    # report which extractors are installed",
+        "       mder --check    # report which extractors are installed",
         file=sys.stderr,
     )
     print(f"Supported formats: {supported_formats_message()}", file=sys.stderr)
@@ -829,7 +1055,22 @@ def main():
     
     # Write combined text
     OUTPUT_TEXT.write_text(consolidated_text, encoding="utf-8")
-    
+
+    # Slice into verbatim per-chapter raw files (deterministic; the generator
+    # copies these into <output>/chapters/raw/ and summarizes each). Prefer the
+    # document's own structural sections (e.g. EPUB spine/ToC) when the parser
+    # exposed them — splitting on real section boundaries never truncates a
+    # chapter. Fall back to heading detection for flat formats (PDF, plain text).
+    combined_sections: list[str] = []
+    for src in extracted_sources:
+        if src.get("sections"):
+            combined_sections.extend(src["sections"])
+    if combined_sections:
+        chapters = sections_to_chapters(combined_sections)
+    else:
+        chapters = split_into_chapters(consolidated_text)
+    chapter_meta = write_chapter_files(chapters, CHAPTERS_DIR)
+
     # Consolidate metadata
     total_file_size_mb = sum(src["file_size_mb"] for src in extracted_sources)
     total_pages = sum(src["pages"] for src in extracted_sources)
@@ -866,6 +1107,8 @@ def main():
         "estimated_tokens": total_tokens,
         "estimated_tokens_human": f"~{total_tokens // 1000}K",
         "output_text": str(OUTPUT_TEXT),
+        "chapters_dir": str(CHAPTERS_DIR),
+        "chapters": chapter_meta,
         "total_sources": len(extracted_sources),
         "sources": [
             {
@@ -904,6 +1147,7 @@ def main():
     print(f"   Words   : {total_words:,}")
     print(f"   Tokens  : ~{total_tokens // 1000}K")
     print(f"   Chapters: {consolidated_structure['chapters_detected']} detected overall")
+    print(f"   Raw     : {len(chapter_meta)} chapter file(s) -> {CHAPTERS_DIR}")
     print(f"   ToC     : {'yes' if consolidated_structure['has_toc'] else 'not detected'}")
     if not consolidated_structure["has_toc"]:
         print(

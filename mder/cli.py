@@ -1,5 +1,5 @@
 import sys
-from book_to_skill.utils import main as utils_main
+from mder.utils import main as utils_main
 
 def main():
     # Force UTF-8 stdout/stderr to avoid UnicodeEncodeError on Windows console

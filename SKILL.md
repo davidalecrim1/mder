@@ -1,27 +1,30 @@
 ---
-name: book-to-skill
-description: "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, plain text, RTF, MOBI/AZW with Calibre) into structured agent skills, extracting frameworks, mental models, principles, techniques, and anti-patterns. Use when the user wants to study a document through GitHub Copilot CLI, Amp, or Claude Code, apply an author's frameworks while working, or build a reusable knowledge base from a file."
+name: mder
+description: "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, plain text, RTF, MOBI/AZW with Calibre) into structured markdown knowledge folders for AI agents, extracting frameworks, mental models, principles, techniques, and anti-patterns. Use when the user wants to study a document through Claude Code, Codex, or OpenCode, apply an author's frameworks while working, or build a reusable knowledge base from a file."
 ---
 
 <!--
 Cross-agent notes (informational; ignored by host agents):
-  - Compatible skill roots: GitHub Copilot CLI (~/.copilot/skills, ~/.agents/skills,
-    .github/skills, .claude/skills, .agents/skills), Amp (.agents/skills,
-    ~/.config/agents/skills, ~/.config/amp/skills), Claude Code (~/.claude/skills).
-  - `allowed-tools` is intentionally omitted to stay agent-neutral: Copilot CLI uses
-    `shell`/MCP-server names, Claude uses `Bash`/`Read`/`Write`/`Glob`/`Grep`, Amp
-    adds `shell_command`. The skill needs shell (to run extract.py) and file
-    read/write — each host will prompt for those on first use.
-  - Argument hint: <path-to-document-folder-or-glob>... [skill-name-slug]
+  - Compatible skill roots: Claude Code (~/.claude/skills, .claude/skills),
+    Codex / OpenCode cross-agent (~/.agents/skills, .agents/skills).
+  - `allowed-tools` is intentionally omitted to stay agent-neutral. The skill needs
+    shell (to run extract.py) and file read/write — each host prompts for those on
+    first use.
+  - Argument hint: [--input <path>]... [--output <dir>] <path-or-folder-or-glob>... [skill-name-slug]
 -->
 
-# Book-to-Skill Converter
+# mder - Document-to-Markdown
 
-Transform written knowledge into actionable agent skills by extracting structure — not producing summaries.
+Transform written knowledge into structured markdown knowledge folders by extracting structure — not producing summaries.
 
 ## Philosophy
 
-Books contain crystallized expertise: frameworks, principles, and techniques that took years to develop. This skill extracts that knowledge into a format GitHub Copilot CLI, Amp, Claude Code, or another compatible agent can leverage repeatedly.
+Books contain crystallized expertise: frameworks, principles, and techniques that took years to develop. This skill extracts that knowledge into a format Claude Code, Codex, OpenCode, or another compatible agent can leverage repeatedly.
+
+Each chapter is kept in **two forms**: a distilled summary (`chapters/summary/`)
+for fast reasoning, and the verbatim source text (`chapters/raw/`) for when the
+full chapter is needed. An agent reads the summary first and opens the raw file
+when precision matters — never a paraphrase standing in for the real text.
 
 **Extract structure, not summaries.** A skill isn't a book report. It's a toolkit of:
 - Named frameworks (mental models with clear application)
@@ -43,7 +46,7 @@ Four paths available. Route based on what the user asks:
 ### 1. Full Conversion (Default)
 **Trigger:** User provides one or more document/directory/glob paths without special instructions
 **Action:** Run all steps below (Steps 0–9)
-**Output:** Complete skill with SKILL.md, chapters/, glossary, patterns, cheatsheet
+**Output:** Complete folder with SKILL.md, `chapters/summary/` (distilled) + `chapters/raw/` (verbatim), glossary, patterns, cheatsheet
 
 ### 2. Analyze Only
 **Trigger:** User says "analyze", "just extract", or "I want to review before generating"
@@ -64,30 +67,28 @@ Four paths available. Route based on what the user asks:
 
 ## Skill Locations
 
-This converter can run from multiple skill systems. When looking for this converter's helper script or writing the generated book skill, prefer these locations in order:
+This converter can run from multiple skill systems. When looking for this converter's helper script (`scripts/extract.py`), prefer these locations in order:
 
-1. GitHub Copilot CLI personal skills: `~/.copilot/skills/`
-2. Cross-agent personal skills (Copilot + Amp): `~/.agents/skills/`
-3. Claude Code personal skills: `~/.claude/skills/`
-4. Project-local Copilot skills: `.github/skills/`
-5. Project-local Claude skills: `.claude/skills/`
-6. Project-local Amp / Copilot skills: `.agents/skills/`
-7. Amp global skills: `~/.config/agents/skills/`
-8. Amp legacy global skills: `~/.config/amp/skills/`
+1. Claude Code personal skills: `~/.claude/skills/`
+2. Codex / OpenCode cross-agent personal skills: `~/.agents/skills/`
+3. Project-local Claude skills: `.claude/skills/`
+4. Project-local cross-agent skills: `.agents/skills/`
 
-For **generated** book skills, pick a destination that the user's host agent can actually discover (see Step 5). When more than one valid root exists, ask the user once and remember the answer for the session — do not silently default.
+**Generated** knowledge folders do not go here — they are written to `--output` (default `~/.mder/`), never into a skill root (see Step 5).
 
 ---
 
 ## Step 0 — Out-of-scope check
 
 If no arguments are provided, stop and respond:
-> "book-to-skill requires a supported document path, folder, or glob pattern. Usage: `book-to-skill <path-to-document-folder-or-glob>... [skill-name-slug]`"
+> "mder requires a supported document path, folder, or glob pattern. Usage: `mder [--input <path>]... [--output <dir>] <path-or-folder-or-glob>... [skill-name-slug]`"
 
-Throughout the workflow:
-- Identify the input paths and the optional skill slug.
-- If the last argument is not a file, folder, or glob that exists or matches any files, and it looks like a skill slug (e.g. lowercase hyphens, alphanumeric), treat it as `SKILL_NAME`.
-- Treat all other arguments as the list of `INPUT_PATHS`.
+Throughout the workflow, parse arguments as follows:
+- **Flags (preferred):**
+  - `--input <path>` — a source document/folder/glob. Repeatable; append each to `INPUT_PATHS`.
+  - `--output <dir>` — the destination root under which the generated folder is written. Expand a leading `~`. Store as `OUTPUT_ROOT`.
+- **Positional (legacy, still supported):** any bare argument that is a file, folder, or glob → append to `INPUT_PATHS`. A trailing argument that is not an existing path but looks like a skill slug (lowercase hyphens, alphanumeric) → treat as `SKILL_NAME`.
+- If `OUTPUT_ROOT` was not provided, default it to `$HOME/.mder`.
 - If any input path is an existing skill directory (contains `SKILL.md` and a `chapters/` sub-folder), or if `SKILL_NAME` matches an existing skill slug in `SKILLS_HOME`, flag this run as an **Update/Fold-in** operation (Mode 4).
 
 ---
@@ -131,14 +132,10 @@ Run the extraction script, passing the input paths:
 ```bash
 SCRIPT_PATH=""
 for candidate in \
-  "$HOME/.copilot/skills/book-to-skill/scripts/extract.py" \
-  "$HOME/.agents/skills/book-to-skill/scripts/extract.py" \
-  "$HOME/.claude/skills/book-to-skill/scripts/extract.py" \
-  ".github/skills/book-to-skill/scripts/extract.py" \
-  ".claude/skills/book-to-skill/scripts/extract.py" \
-  ".agents/skills/book-to-skill/scripts/extract.py" \
-  "$HOME/.config/agents/skills/book-to-skill/scripts/extract.py" \
-  "$HOME/.config/amp/skills/book-to-skill/scripts/extract.py"
+  "$HOME/.claude/skills/mder/scripts/extract.py" \
+  "$HOME/.agents/skills/mder/scripts/extract.py" \
+  ".claude/skills/mder/scripts/extract.py" \
+  ".agents/skills/mder/scripts/extract.py"
 do
   if [ -f "$candidate" ]; then
     SCRIPT_PATH="$candidate"
@@ -147,7 +144,7 @@ do
 done
 
 if [ -z "$SCRIPT_PATH" ]; then
-  echo "Could not find scripts/extract.py for book-to-skill" >&2
+  echo "Could not find scripts/extract.py for mder" >&2
   exit 1
 fi
 
@@ -164,16 +161,21 @@ Before extraction, the script checks optional Python packages needed for the det
 **Tip — preflight the environment:** run `"$PYTHON_BIN" "$SCRIPT_PATH" --check` to print a per-format report of which extractors are installed and the exact command to install whatever is missing, without processing any file. Useful when a user reports a setup or quality problem.
 
 This creates:
-- `<tempdir>/book_skill_work/full_text.txt` — combined extracted text of all sources with clear visually demarcated boundaries.
-- `<tempdir>/book_skill_work/metadata.json` — overall combined size, words, pages, token counts, and a detailed list of individual processed `sources`.
+- `<tempdir>/mder_work/full_text.txt` — combined extracted text of all sources with clear visually demarcated boundaries.
+- `<tempdir>/mder_work/metadata.json` — overall combined size, words, pages, token counts, a detailed list of processed `sources`, and a **`chapters`** array (the canonical, deterministic chapter split) plus `chapters_dir`.
+- `<tempdir>/mder_work/chapters/<index>-<slug>.md` — one **verbatim raw** file per chapter, sliced deterministically by the extractor. These are the source of truth for chapter boundaries and become `chapters/raw/` in the output.
 
-Read `<tempdir>/book_skill_work/metadata.json` to inspect the results.
+Read `<tempdir>/mder_work/metadata.json` to inspect the results. Treat its
+`chapters` list (each entry: `index`, `number`, `title`, `slug`, `file`, `chars`,
+`words`) as the authoritative chapter set — do **not** re-derive chapter
+boundaries by hand. Every generated summary pairs 1:1 with a raw file by
+`<index>-<slug>`.
 
 ---
 
 ## Step 2.5 — Pre-flight cost estimate
 
-Read `<tempdir>/book_skill_work/metadata.json` and present the user with an estimate **before doing any generation**:
+Read `<tempdir>/mder_work/metadata.json` and present the user with an estimate **before doing any generation**:
 
 ```
 📖 Sources detected: <total_sources> source(s)
@@ -192,7 +194,7 @@ Read `<tempdir>/book_skill_work/metadata.json` and present the user with an esti
    ⏱  Estimated time: ~<N> minutes
 
 📁 Files to be generated/updated:
-   SKILL.md + chapter files + glossary + patterns + cheatsheet
+   SKILL.md + chapters/summary/ (distilled) + chapters/raw/ (verbatim, copied) + glossary + patterns + cheatsheet
 
 ➡  Proceed with Full Conversion / Update? (or type "analyze only" to preview first)
 ```
@@ -267,6 +269,9 @@ Then read the Table of Contents section if present to map all chapters.
 
 ### Chapters Detected
 | # | Title | Main Frameworks |
+
+(Use `metadata.chapters` as the authoritative chapter list — index, title, and
+slug are already assigned. This section just annotates each with its frameworks.)
 ```
 
 ---
@@ -291,30 +296,16 @@ Use the answer to weight what gets highlighted in the SKILL.md Core section.
 
 ---
 
-## Step 5 — Determine skill name
+## Step 5 — Determine skill name and destination
 
-If `SKILL_NAME` was provided, use it as the skill slug.
-Otherwise, propose two options and let the user choose:
-- **By author-concept**: `{author-lastname}-{core-concept}` (e.g. `cialdini-influence`, `meadows-systems`)
-- **By title**: lowercase hyphens from book title (e.g. `designing-data-intensive-apps`)
+If `SKILL_NAME` was provided, use it as the slug.
+Otherwise, derive the slug:
+- **Single source:** slugify the input filename stem (lowercase, hyphens; e.g. `Skin in the Game by Nassim Nicholas Taleb.epub` → `skin-in-the-game-by-nassim-nicholas-taleb`). If the book has a strong methodological identity, you may instead propose the author-concept form (`{author-lastname}-{core-concept}`, e.g. `cialdini-influence`) and let the user choose.
+- **Multiple sources:** propose an author-concept or title-based slug and let the user choose.
 
-Default to author-concept format if the book has a strong methodological identity.
+**Destination.** Set `SKILLS_HOME="$OUTPUT_ROOT"` — the `--output` value if given, otherwise the `$HOME/.mder` default. `mkdir -p "$SKILLS_HOME"` if it does not exist. Do **not** probe skill roots, run host detection, or write into `~/.claude/skills` — generated folders are plain markdown knowledge folders, not auto-installed skills. The user installs one as a skill later only if they choose to.
 
-Choose the destination skill root (`SKILLS_HOME`). Probe the user's filesystem for existing skill homes and pick by **the host the user is running in**:
-
-| Host agent | Personal skill root (probe in order) | Project-local root |
-|---|---|---|
-| **GitHub Copilot CLI** | `~/.copilot/skills` → `~/.agents/skills` | `.github/skills` → `.claude/skills` → `.agents/skills` |
-| **Amp** | `~/.agents/skills` → `~/.config/agents/skills` → `~/.config/amp/skills` | `.agents/skills` |
-| **Claude Code** | `~/.claude/skills` | `.claude/skills` |
-
-Selection rules:
-1. If **exactly one** of the host's candidate roots exists on disk, use it without asking.
-2. If **none** exist (fresh machine), ask the user which root to create — present the host-appropriate options and remember the choice for the session. Do not silently pick.
-3. If the user explicitly asked for project-local output, prefer the project-local row.
-4. If you cannot identify the host, ask: "Which agent are you running this in — GitHub Copilot CLI, Amp, or Claude Code?"
-
-Set `SKILLS_HOME` to the selected root and check if `$SKILLS_HOME/<skill_name>/` already exists.
+Check if `$SKILLS_HOME/<skill_name>/` already exists.
 If it does, prompt the user to choose:
 1. **Update / Fold-in** (Mode 4) — integrate new files/content into the existing skill components.
 2. **Overwrite** — delete and regenerate the skill from scratch.
@@ -324,11 +315,32 @@ If the user selects **Update / Fold-in**, proceed immediately to the **Update / 
 
 ---
 
-## Step 6 — Create skill directory structure
+## Step 6 — Create directory structure and copy raw chapters
+
+Chapters live in two parallel sub-folders: `summary/` (the distilled files you
+write) and `raw/` (the verbatim source slices the extractor already produced).
 
 ```bash
-mkdir -p "$SKILLS_HOME/<skill_name>/chapters"
+# Full Conversion only: clear any prior chapters so a regeneration with a
+# different chapter count or slugs can't leave stale files behind. (Do NOT run
+# this on an Update/Fold-in — that path merges into the existing folder.)
+rm -rf "$SKILLS_HOME/<skill_name>/chapters/summary" "$SKILLS_HOME/<skill_name>/chapters/raw"
+mkdir -p "$SKILLS_HOME/<skill_name>/chapters/summary"
+mkdir -p "$SKILLS_HOME/<skill_name>/chapters/raw"
+
+# Copy the deterministic raw chapter files from the workdir (path is
+# metadata.chapters_dir). This is a plain file copy — it costs zero tokens and
+# keeps the chapter text verbatim; never re-emit raw content by hand.
+cp -R "$CHAPTERS_DIR"/. "$SKILLS_HOME/<skill_name>/chapters/raw/"
 ```
+
+On a re-run over an existing folder, also overwrite the top-level `SKILL.md`,
+`glossary.md`, `patterns.md`, and `cheatsheet.md` (they are single files, so a
+rewrite replaces them cleanly).
+
+`$CHAPTERS_DIR` is `metadata.chapters_dir` (e.g. `<tempdir>/mder_work/chapters`).
+After this, `chapters/raw/` holds one `<index>-<slug>.md` per entry in
+`metadata.chapters`.
 
 ---
 
@@ -354,11 +366,16 @@ The per-chapter budget scales with `BOOK_TYPE` and `DEPTH`. Technical chapters n
 
 If a chapter genuinely has no worked example and resists expansion, let it land below the study floor rather than padding — and note that the chapter is thin in its Core Idea. A `reference`-depth chapter, by contrast, deliberately omits worked examples and keeps only the decision-ready essentials.
 
-For EACH chapter/major section identified in Step 3:
+For EACH entry in `metadata.chapters` (the canonical chapter list):
 
-Read the corresponding section of the extracted `full_text.txt` (use character offsets or grep for chapter headings).
+Read its raw file at `$SKILLS_HOME/<skill_name>/chapters/raw/<index>-<slug>.md`
+(already copied in Step 6) — that is the exact chapter text. Do not re-slice
+`full_text.txt` by hand.
 
-Create `$SKILLS_HOME/<skill_name>/chapters/ch<NN>-<slug>.md` using the structure below.
+Create the summary at `$SKILLS_HOME/<skill_name>/chapters/summary/<index>-<slug>.md`
+— **the same `<index>-<slug>` filename as the raw file**, so summary and raw pair
+1:1. Use the structure below. At the top of each summary, link to its verbatim
+source: `> Full text: [raw](../raw/<index>-<slug>.md)`.
 
 **Adapt emphasis based on `BOOK_TYPE`:**
 - `technical` → prioritize "Code Examples", "Reference Tables", and "Commands & APIs" sections; preserve exact syntax
@@ -489,10 +506,13 @@ the relevant chapter file before answering.
 
 ## Chapter Index
 
-| # | Title | Key Frameworks |
-|---|-------|----------------|
-| [ch01](chapters/ch01-<slug>.md) | <Title> | <framework1>, <framework2> |
-| [ch02](chapters/ch02-<slug>.md) | <Title> | <framework1>, <framework2> |
+Each chapter has a distilled summary and the full verbatim text (same filename
+under `chapters/raw/`).
+
+| # | Title | Summary | Raw | Key Frameworks |
+|---|-------|---------|-----|----------------|
+| ch01 | <Title> | [summary](chapters/summary/ch01-<slug>.md) | [raw](chapters/raw/ch01-<slug>.md) | <framework1>, <framework2> |
+| ch02 | <Title> | [summary](chapters/summary/ch02-<slug>.md) | [raw](chapters/raw/ch02-<slug>.md) | <framework1>, <framework2> |
 ...
 
 ## Topic Index
@@ -545,7 +565,7 @@ import shutil
 import tempfile
 from pathlib import Path
 shutil.rmtree(
-    os.environ.get("BOOK_SKILL_WORKDIR", Path(tempfile.gettempdir()) / "book_skill_work"),
+    os.environ.get("MDER_WORKDIR", Path(tempfile.gettempdir()) / "mder_work"),
     ignore_errors=True,
 )
 PY
@@ -560,9 +580,10 @@ Then report to the user:
 📄 Pages: ~<N> | Chapters: <N>
 
 Files generated:
-  SKILL.md         — core frameworks + index   (~X tokens)
-  chapters/        — <N> chapter summaries     (~X tokens each, ~X total)
-  glossary.md      — key terms                 (~X tokens)
+  SKILL.md            — core frameworks + index   (~X tokens)
+  chapters/summary/   — <N> distilled chapters    (~X tokens each, ~X total)
+  chapters/raw/       — <N> verbatim chapters      (full source text)
+  glossary.md         — key terms                 (~X tokens)
   patterns.md      — techniques & patterns     (~X tokens)
   cheatsheet.md    — quick reference           (~X tokens)
   ─────────────────────────────────────────────────────
@@ -576,12 +597,8 @@ Usage:
   Ask <skill_name> for ch<N>            → dive into a specific chapter
 
 Reload (if your agent doesn't auto-detect new skills):
-  GitHub Copilot CLI:  /skills reload
-  Claude Code:         restart the session
-  Amp:                 restart the session
-
-Share this skill (Copilot ecosystem, optional):
-  gh skill publish $SKILLS_HOME/<skill_name>
+  Claude Code:        restart the session
+  Codex / OpenCode:   reload skills or restart the session
 ```
 
 ---
@@ -593,19 +610,18 @@ When performing an Update/Fold-in operation on an existing skill at `$SKILLS_HOM
 ### 1. Read Existing Skill Structure
 Read and parse the existing skill's files:
 - Read `$SKILLS_HOME/<skill_name>/SKILL.md` to parse the existing **Chapter Index**, **Topic Index**, metadata (author, total chapters), and **Core Frameworks**.
-- List all files in `$SKILLS_HOME/<skill_name>/chapters/` to find the highest chapter number (e.g. `ch12`).
+- List `$SKILLS_HOME/<skill_name>/chapters/summary/` to find the highest chapter index (e.g. `ch12`). (Older skills may have a flat `chapters/`; if so, migrate those files into `chapters/summary/` and create `chapters/raw/`.)
 - Read `$SKILLS_HOME/<skill_name>/glossary.md`, `$SKILLS_HOME/<skill_name>/patterns.md`, and `$SKILLS_HOME/<skill_name>/cheatsheet.md` to see what terms and frameworks are already indexed.
 
 ### 2. Match Content & Identify Revisions vs. Additions
-Analyze the new extracted text in `<tempdir>/book_skill_work/full_text.txt` to identify if the new content represents:
-- **Updates/Revisions to existing chapters**: If a section of the new content directly updates or expands an existing chapter's topic, read the existing chapter file, merge the new details into it, and rewrite the file.
-- **New additions**: If the content introduces new chapters, papers, or separate sections, create **new chapter summary files** under `chapters/`. Start numbering these files after the highest existing chapter number (e.g. if the existing chapters stop at `ch12`, create `ch13-*.md`, `ch14-*.md`, etc.).
+The new extraction produced its own `metadata.chapters` list and raw files. Identify whether each new chapter is:
+- **An update/revision to an existing chapter**: merge the new details into the existing `chapters/summary/<index>-<slug>.md` and refresh its `chapters/raw/` counterpart from the new raw file.
+- **A new addition**: append it, continuing the index after the highest existing one (e.g. existing stops at `ch12` → new files become `ch13-*`, `ch14-*`). Keep the summary and raw filenames identical.
 
-### 3. Generate or Update Chapter Summary Files
+### 3. Generate or Update Chapter Files
 For each new or revised chapter:
-- Read the corresponding section of the extracted new text.
-- Follow the formatting guidelines in **Step 7** to build the summary.
-- Write/update the file in `$SKILLS_HOME/<skill_name>/chapters/`.
+- Copy its raw file into `$SKILLS_HOME/<skill_name>/chapters/raw/<index>-<slug>.md` (from `metadata.chapters_dir`; re-index the filename if it collides with an existing chapter).
+- Read that raw file and follow **Step 7** to write/update the summary at `$SKILLS_HOME/<skill_name>/chapters/summary/<index>-<slug>.md` (same filename).
 
 ### 4. Merge Supporting Files
 - **Merge glossary.md**:
@@ -627,7 +643,7 @@ For each new or revised chapter:
 Update the master skill file `$SKILLS_HOME/<skill_name>/SKILL.md`:
 - **Metadata**: Increment the chapter count, update the estimated page count, and add the new source names if appropriate. Update the `Generated` date to the current date.
 - **Core Frameworks**: Fold in the most high-impact mental models or principles from the new content (ensuring the overall file remains under 4,000 tokens).
-- **Chapter Index**: Append the new chapters to the index table, linking to the newly created files.
+- **Chapter Index**: Append the new chapters to the index table, with both the `chapters/summary/<index>-<slug>.md` and `chapters/raw/<index>-<slug>.md` links (matching the Step 9 table format).
 - **Topic Index**: Merge the new topics alphabetically. If an existing topic is also covered in the new chapters, append the new chapter links to its line (e.g. `- **Topic** → ch05, ch13`).
 
 ### 6. Scan, Cleanup, and Report
