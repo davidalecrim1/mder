@@ -27,7 +27,7 @@ jobs:
       - name: Install pytest
         run: pip install pytest
       - name: Run test suite
-        run: pytest tests/ -q
+        run: make test
 
   lint:
     name: lint (ruff)
@@ -43,7 +43,7 @@ jobs:
         # High-value gate: syntax errors (E9, e.g. IndentationError) + pyflakes
         # (F: undefined names, unused imports). Style rules are intentionally
         # not gated yet to avoid blocking on cosmetic churn.
-        run: ruff check --select E9,F --target-version py310 mder/ scripts/ tests/ tools/
+        run: make lint
 
   smoke:
     name: smoke (dependency-free extraction)
@@ -54,15 +54,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Extract a sample with no optional deps installed
-        run: |
-          set -euo pipefail
-          mkdir -p sample
-          printf '# Backpressure\n\nChapter 1\nBounded queues prevent overload.\n' > sample/note.md
-          export MDER_WORKDIR="$RUNNER_TEMP/work"
-          python3 scripts/extract.py sample/note.md --mode text --install-missing no
-          test -f "$MDER_WORKDIR/full_text.txt"
-          test -f "$MDER_WORKDIR/metadata.json"
-          grep -q "Backpressure" "$MDER_WORKDIR/full_text.txt"
+        run: make smoke
 
   security:
     name: security (bandit + zizmor)
@@ -78,7 +70,7 @@ jobs:
         # Hard gate: only HIGH-severity / MEDIUM-confidence findings fail CI, to
         # avoid blocking on the known-acceptable subprocess (pip install) calls.
         # Ratchet down to medium once the open B314 docx-XML finding is hardened.
-        run: bandit -q -r mder scripts tools --severity-level high --confidence-level medium
+        run: make security
       - name: Bandit — report MEDIUM+ (informational)
         run: bandit -q -r mder scripts tools -ll || true
       - name: Zizmor — workflow audit (informational)
@@ -99,7 +91,7 @@ jobs:
         # Fails on Claude-breaking issues (missing name/description, oversized
         # description, a tool restriction that omits Bash while the skill shells
         # out). Cross-agent metadata Claude ignores is reported as WARN only.
-        run: python3 tools/validate_skill.py SKILL.md
+        run: make validate-skill
 
   dependency-review:
     name: dependency review (PR)

@@ -23,8 +23,12 @@ The pipeline has two halves that meet at a temp workdir. This split is the singl
 
 ## Commands
 
+The `Makefile` mirrors the locally-reproducible CI jobs (test, lint, smoke,
+security, validate-skill). Run `make ci` to reproduce them all, or an
+individual target. `make install-dev` installs pytest, ruff, and bandit.
+
 ```bash
-# Tests (417 currently pass)
+# Tests (433 currently pass)
 python3 -m pytest -q
 python3 -m pytest tests/test_mder.py -q                 # one file
 python3 -m pytest tests/test_mder.py::TestCliHelp -q    # one class
@@ -48,4 +52,4 @@ Console entry point is `mder = mder.cli:main` (which delegates to `mder.utils.ma
 
 - Docs pages under `docs/` use SHOUTING_CASE filenames (e.g. `HOW_IT_WORKS.md`), except `index.md` and `404.md` which MkDocs requires lowercase. `mkdocs.yml` nav, the `redirects` map, and cross-links must stay in sync when renaming a page.
 - Supported host agents are Claude Code, Codex, and OpenCode. Skill roots probed for the helper script: `~/.claude/skills/` and the cross-agent `~/.agents/skills/` (plus project-local `.claude/`, `.agents/`).
-- CI's extraction smoke test (`.github/workflows/ci.yml`) runs `scripts/extract.py sample/note.md`; a `sample/note.md` fixture must exist for that job to pass.
+- CI jobs call `make` targets (`make test`/`lint`/`smoke`/`security`/`validate-skill`) so local and CI run the exact same commands — change the command in the `Makefile`, not in `.github/workflows/ci.yml`. The `smoke` target generates its own `sample/note.md` before extracting it.

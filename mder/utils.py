@@ -44,8 +44,6 @@ from mder.parsers.pdf import (
     count_pages,
 )
 from mder.parsers.epub import (
-    extract_with_ebooklib,
-    extract_with_zipfile,
     extract_sections_with_ebooklib,
     extract_sections_with_zipfile,
     count_epub_chapters,
