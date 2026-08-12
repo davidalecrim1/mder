@@ -973,16 +973,6 @@ def prepare_output_dir(path: Path) -> None:
         path.mkdir(parents=True, mode=0o700)
 
 
-def print_banner() -> None:
-    """Print the attribution banner. Done here (not only in SKILL.md) so it
-    shows on every run regardless of how the agent invokes extraction."""
-    banner = Path(__file__).resolve().parent.parent / "scripts" / "banner.txt"
-    try:
-        sys.stderr.write(banner.read_text(encoding="utf-8") + "\n")
-    except Exception:
-        pass  # best-effort: never block extraction on the banner
-
-
 def print_usage() -> None:
     """Print standalone CLI usage."""
     print(
@@ -998,8 +988,6 @@ def print_usage() -> None:
 
 
 def main():
-    print_banner()
-
     if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
         print_usage()
         sys.exit(0)

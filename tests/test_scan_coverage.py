@@ -102,7 +102,7 @@ class TestUnscannedMarkdownIsReported:
 
     def test_nothing_reported_when_scope_is_complete(self, tmp_path):
         skill = _skill(tmp_path / "complete")
-        (skill / "glossary.md").write_text("Term.\n", encoding="utf-8")
+        (skill / "GLOSSARY.md").write_text("Term.\n", encoding="utf-8")
         (skill / "chapters" / "part1").mkdir()
         (skill / "chapters" / "part1" / "ch02.md").write_text("Two.\n",
                                                              encoding="utf-8")

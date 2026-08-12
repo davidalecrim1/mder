@@ -79,7 +79,7 @@ def test_scanner_rejects_symbolic_link_supporting_file(tmp_path: Path):
     skill = _write_clean_skill(tmp_path / "symlink-reference")
     target = tmp_path / "outside.md"
     target.write_text("# External\n", encoding="utf-8")
-    supporting_file = skill / "glossary.md"
+    supporting_file = skill / "GLOSSARY.md"
     supporting_file.unlink()
     try:
         supporting_file.symlink_to(target)
@@ -89,7 +89,7 @@ def test_scanner_rejects_symbolic_link_supporting_file(tmp_path: Path):
     try:
         scanner.scan_generated_skill(skill)
     except scanner.ScanError as exc:
-        assert "glossary.md must be a real file" in str(exc)
+        assert "GLOSSARY.md must be a real file" in str(exc)
     else:
         raise AssertionError("symbolic-link supporting files should fail closed")
 

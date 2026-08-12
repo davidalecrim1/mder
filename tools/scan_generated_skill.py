@@ -15,7 +15,7 @@ from typing import Iterable, Sequence
 MAX_SKILL_FILES = 1_000
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 20 * 1024 * 1024
-SUPPORTING_FILENAMES = ("glossary.md", "patterns.md", "cheatsheet.md")
+SUPPORTING_FILENAMES = ("GLOSSARY.md", "PATTERNS.md", "CHEATSHEET.md")
 
 # Reuse the extractor's invisible-code-point set instead of duplicating it, so
 # the two injection defenses cannot drift apart. They previously did: the

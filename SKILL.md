@@ -10,7 +10,7 @@ Cross-agent notes (informational; ignored by host agents):
   - `allowed-tools` is intentionally omitted to stay agent-neutral. The skill needs
     shell (to run extract.py) and file read/write — each host prompts for those on
     first use.
-  - Argument hint: [--input <path>]... [--output <dir>] <path-or-folder-or-glob>... [skill-name-slug]
+  - Argument hint: [--input <path>]... [--output <dir>] [--raw-only] <path-or-folder-or-glob>... [skill-name-slug]
 -->
 
 # mder - Document-to-Markdown
@@ -41,7 +41,7 @@ when precision matters — never a paraphrase standing in for the real text.
 
 ## Modes of Operation
 
-Four paths available. Route based on what the user asks:
+Five paths available. Route based on what the user asks:
 
 ### 1. Full Conversion (Default)
 **Trigger:** User provides one or more document/directory/glob paths without special instructions
@@ -58,7 +58,12 @@ Four paths available. Route based on what the user asks:
 **Action:** Skip Steps 0–3, use the provided analysis as input, run Steps 4–9
 **Output:** Skill files from the provided analysis
 
-### 4. Update / Fold-in (Existing Skill)
+### 4. Raw-Only Extraction
+**Trigger:** The `--raw-only` flag is present (or the user says "raw only", "just split the chapters", "no summaries").
+**Action:** Run Step 0, Step 1, Step 1.5, Step 2, Step 2.5, Step 5 (name/destination), and Step 6 (create dirs + copy raw chapters). Then **skip Steps 4, 7, and 8** and run the **Raw-Only variant of Step 9** (a lean SKILL.md index of the raw chapters — no summary column). Finish with Step 9.5 and Step 10.
+**Output:** `<output>/<slug>/` with `chapters/raw/` and a `SKILL.md` index only — no `chapters/summary/`, no `GLOSSARY.md`, `PATTERNS.md`, or `CHEATSHEET.md`.
+
+### 5. Update / Fold-in (Existing Skill)
 **Trigger:** User provides one or more new source paths and indicates they want to update an existing skill (either by pointing to the existing skill folder, providing a skill slug that already exists in `SKILLS_HOME`, or explicitly requesting an update).
 **Action:** Run Step 0 (out-of-scope check), Step 1 (validate inputs), Step 1.5 (identify book type), and Step 2 (extract new files). Then skip to Step 5 (identify/detect existing skill path) and run the **Update / Fold-in Workflow** to merge the new content into the existing skill files.
 **Output:** Updated existing skill with new/revised chapter summaries and merged indexes/glossaries.
@@ -81,12 +86,13 @@ This converter can run from multiple skill systems. When looking for this conver
 ## Step 0 — Out-of-scope check
 
 If no arguments are provided, stop and respond:
-> "mder requires a supported document path, folder, or glob pattern. Usage: `mder [--input <path>]... [--output <dir>] <path-or-folder-or-glob>... [skill-name-slug]`"
+> "mder requires a supported document path, folder, or glob pattern. Usage: `mder [--input <path>]... [--output <dir>] [--raw-only] <path-or-folder-or-glob>... [skill-name-slug]`"
 
 Throughout the workflow, parse arguments as follows:
 - **Flags (preferred):**
   - `--input <path>` — a source document/folder/glob. Repeatable; append each to `INPUT_PATHS`.
   - `--output <dir>` — the destination root under which the generated folder is written. Expand a leading `~`. Store as `OUTPUT_ROOT`.
+  - `--raw-only` — a boolean switch (takes no value). Set `RAW_ONLY=true`. This selects **Mode 4 (Raw-Only Extraction)**: only the raw chapter split and a lean `SKILL.md` index are written — no summaries, glossary, patterns, or cheatsheet. Default is `RAW_ONLY=false`.
 - **Positional (legacy, still supported):** any bare argument that is a file, folder, or glob → append to `INPUT_PATHS`. A trailing argument that is not an existing path but looks like a skill slug (lowercase hyphens, alphanumeric) → treat as `SKILL_NAME`.
 - If `OUTPUT_ROOT` was not provided, default it to `$HOME/.mder`.
 - If any input path is an existing skill directory (contains `SKILL.md` and a `chapters/` sub-folder), or if `SKILL_NAME` matches an existing skill slug in `SKILLS_HOME`, flag this run as an **Update/Fold-in** operation (Mode 4).
@@ -278,6 +284,8 @@ slug are already assigned. This section just annotates each with its frameworks.
 
 ## Step 4 — Ask purpose (Full Conversion only)
 
+**Skip this step entirely if `RAW_ONLY=true`** — no summaries are generated, so purpose/depth do not apply.
+
 Before generating, ask the user:
 
 > "What should this skill help you do? (Pick one or more)
@@ -320,13 +328,17 @@ If the user selects **Update / Fold-in**, proceed immediately to the **Update / 
 Chapters live in two parallel sub-folders: `summary/` (the distilled files you
 write) and `raw/` (the verbatim source slices the extractor already produced).
 
+If `RAW_ONLY=true`, create and copy **only** `chapters/raw/` — skip the
+`chapters/summary/` directory entirely (no summaries will be written).
+
 ```bash
 # Full Conversion only: clear any prior chapters so a regeneration with a
 # different chapter count or slugs can't leave stale files behind. (Do NOT run
 # this on an Update/Fold-in — that path merges into the existing folder.)
 rm -rf "$SKILLS_HOME/<skill_name>/chapters/summary" "$SKILLS_HOME/<skill_name>/chapters/raw"
-mkdir -p "$SKILLS_HOME/<skill_name>/chapters/summary"
 mkdir -p "$SKILLS_HOME/<skill_name>/chapters/raw"
+# Skip the next line when RAW_ONLY=true:
+mkdir -p "$SKILLS_HOME/<skill_name>/chapters/summary"
 
 # Copy the deterministic raw chapter files from the workdir (path is
 # metadata.chapters_dir). This is a plain file copy — it costs zero tokens and
@@ -335,7 +347,7 @@ cp -R "$CHAPTERS_DIR"/. "$SKILLS_HOME/<skill_name>/chapters/raw/"
 ```
 
 On a re-run over an existing folder, also overwrite the top-level `SKILL.md`,
-`glossary.md`, `patterns.md`, and `cheatsheet.md` (they are single files, so a
+`GLOSSARY.md`, `PATTERNS.md`, and `CHEATSHEET.md` (they are single files, so a
 rewrite replaces them cleanly).
 
 `$CHAPTERS_DIR` is `metadata.chapters_dir` (e.g. `<tempdir>/mder_work/chapters`).
@@ -345,6 +357,10 @@ After this, `chapters/raw/` holds one `<index>-<slug>.md` per entry in
 ---
 
 ## Step 7 — Generate chapter summaries
+
+**If `RAW_ONLY=true`, skip this entire step and Step 8, and go straight to the
+Raw-Only variant of Step 9.** No summaries, glossary, patterns, or cheatsheet
+are produced in raw-only mode.
 
 **TOKEN BUDGET RULE — CRITICAL (adaptive):**
 
@@ -434,20 +450,31 @@ source: `> Full text: [raw](../raw/<index>-<slug>.md)`.
 
 ## Step 8 — Generate supporting files
 
-### glossary.md
-Create `$SKILLS_HOME/<skill_name>/glossary.md`:
+**Skip this entire step if `RAW_ONLY=true`** — GLOSSARY/PATTERNS/CHEATSHEET are not produced in raw-only mode.
+
+**Chapter references — always link to the summary.** Whenever one of these files
+cites a chapter, make it a markdown link to that chapter's **summary** file
+(`chapters/summary/<index>-<slug>.md`), never the raw file and never a bare
+`(Ch N)`. The summary is the right entry point: it already links to the verbatim
+raw chapter at its top (`> Full text: [raw](../raw/<index>-<slug>.md)`), so a
+reader who needs the exact source is one hop away. Reference chain:
+supporting file → chapter summary → raw text.
+
+### GLOSSARY.md
+Create `$SKILLS_HOME/<skill_name>/GLOSSARY.md`:
 - Every significant term from the book, alphabetically sorted
-- Format: `**Term** — definition (Ch N)`
+- Format: `**Term** — definition ([ch<N>](chapters/summary/ch<N>-<slug>.md))`
+  (link to the summary; multiple chapters → one link each)
 - Max 1,500 tokens
 
-### patterns.md
-Create `$SKILLS_HOME/<skill_name>/patterns.md`:
+### PATTERNS.md
+Create `$SKILLS_HOME/<skill_name>/PATTERNS.md`:
 - All concrete techniques, design patterns, algorithms from the book
-- Format: `## Pattern Name\n**When to use**: ...\n**How**: ...\n**Trade-offs**: ...`
+- Format: `## Pattern Name\n**When to use**: ...\n**How**: ...\n**Trade-offs**: ...\n**Source**: [ch<N>](chapters/summary/ch<N>-<slug>.md)`
 - Max 2,000 tokens
 
-### cheatsheet.md
-Create `$SKILLS_HOME/<skill_name>/cheatsheet.md`:
+### CHEATSHEET.md
+Create `$SKILLS_HOME/<skill_name>/CHEATSHEET.md`:
 
 **This is the most differentiated layer of the skill — treat it as a reasoning aid, not a keyword list.** Anyone can grep the glossary for a term. The cheatsheet captures the author's *judgment*: the decisions they'd make and why. It's the file that turns "I know the words" into "I'd act the way the author would".
 
@@ -461,6 +488,7 @@ Prioritize, in order:
 Avoid: bare term→definition rows (that's the glossary), and prose paragraphs (that's the chapters). Every line should help the reader *decide* something.
 
 - Format mostly as compact tables and decision rules; the content you'd want on a single printed page kept beside you while working.
+- When a rule traces to a specific chapter, link it to that chapter's summary (`[ch<N>](chapters/summary/ch<N>-<slug>.md)`).
 - Max 1,200 tokens.
 
 ---
@@ -523,9 +551,9 @@ under `chapters/raw/`).
 
 ## Supporting Files
 
-- [glossary.md](glossary.md) — all key terms with definitions
-- [patterns.md](patterns.md) — all techniques and design patterns
-- [cheatsheet.md](cheatsheet.md) — quick reference tables and decision guides
+- [GLOSSARY.md](GLOSSARY.md) — all key terms with definitions
+- [PATTERNS.md](PATTERNS.md) — all techniques and design patterns
+- [CHEATSHEET.md](CHEATSHEET.md) — quick reference tables and decision guides
 
 ---
 
@@ -537,6 +565,53 @@ or ask the agent directly.
 ```
 
 ---
+
+### Step 9 — Raw-Only variant (when `RAW_ONLY=true`)
+
+Write a lean `$SKILLS_HOME/<skill_name>/SKILL.md` that indexes the raw chapters
+only. There is **no** Core Frameworks section, **no** summary column, and **no**
+Supporting Files section (those files were not generated). Keep the body under
+4,000 tokens.
+
+```markdown
+---
+name: <skill_name>
+description: "Raw chapter extract of \"<Full Title>\" by <Author(s)>. Verbatim source text split by chapter, with no summaries. Use to read or search the original text of <key topics, 3–6 terms>."
+---
+
+<!-- argument-hint: [chapter number or topic] -->
+
+# <Full Title>
+**Author**: <Author(s)> | **Pages**: ~<N> | **Chapters**: <N> | **Generated**: <YYYY-MM-DD>
+**Mode**: raw-only (verbatim chapter text; no summaries or reference files)
+
+## How to Use This Skill
+
+- **With a chapter** — ask for `ch05`; I open that raw chapter file.
+- **With a topic** — ask about a term; I grep the raw chapters and read the matches.
+- **Browse** — ask "what chapters do you have?" to see the full index.
+
+There are no distilled summaries in this skill — every answer is read directly
+from the verbatim chapter text under `chapters/raw/`.
+
+## Chapter Index
+
+| # | Title | Raw |
+|---|-------|-----|
+| ch01 | <Title> | [raw](chapters/raw/ch01-<slug>.md) |
+| ch02 | <Title> | [raw](chapters/raw/ch02-<slug>.md) |
+...
+
+---
+
+## Scope & Limits
+
+This skill contains the verbatim source text only, split by chapter — no
+summaries, glossary, patterns, or cheatsheet. Regenerate without `--raw-only`
+to produce the full distilled knowledge folder.
+```
+
+Then continue to Step 9.5 and Step 10.
 
 ## Step 9.5 — Scan the generated skill
 
@@ -583,9 +658,9 @@ Files generated:
   SKILL.md            — core frameworks + index   (~X tokens)
   chapters/summary/   — <N> distilled chapters    (~X tokens each, ~X total)
   chapters/raw/       — <N> verbatim chapters      (full source text)
-  glossary.md         — key terms                 (~X tokens)
-  patterns.md      — techniques & patterns     (~X tokens)
-  cheatsheet.md    — quick reference           (~X tokens)
+  GLOSSARY.md         — key terms                 (~X tokens)
+  PATTERNS.md         — techniques & patterns     (~X tokens)
+  CHEATSHEET.md       — quick reference           (~X tokens)
   ─────────────────────────────────────────────────────
   Total skill size: ~X tokens (loaded on-demand, not all at once)
 
@@ -601,6 +676,12 @@ Reload (if your agent doesn't auto-detect new skills):
   Codex / OpenCode:   reload skills or restart the session
 ```
 
+**Raw-only report:** when `RAW_ONLY=true`, drop the `chapters/summary/`,
+`GLOSSARY.md`, `PATTERNS.md`, and `CHEATSHEET.md` lines from the "Files
+generated" list (only `SKILL.md` and `chapters/raw/` were written), and note
+that the folder can be regenerated without `--raw-only` for the full distilled
+version.
+
 ---
 
 ## Update / Fold-in Workflow
@@ -611,7 +692,7 @@ When performing an Update/Fold-in operation on an existing skill at `$SKILLS_HOM
 Read and parse the existing skill's files:
 - Read `$SKILLS_HOME/<skill_name>/SKILL.md` to parse the existing **Chapter Index**, **Topic Index**, metadata (author, total chapters), and **Core Frameworks**.
 - List `$SKILLS_HOME/<skill_name>/chapters/summary/` to find the highest chapter index (e.g. `ch12`). (Older skills may have a flat `chapters/`; if so, migrate those files into `chapters/summary/` and create `chapters/raw/`.)
-- Read `$SKILLS_HOME/<skill_name>/glossary.md`, `$SKILLS_HOME/<skill_name>/patterns.md`, and `$SKILLS_HOME/<skill_name>/cheatsheet.md` to see what terms and frameworks are already indexed.
+- Read `$SKILLS_HOME/<skill_name>/GLOSSARY.md`, `$SKILLS_HOME/<skill_name>/PATTERNS.md`, and `$SKILLS_HOME/<skill_name>/CHEATSHEET.md` to see what terms and frameworks are already indexed.
 
 ### 2. Match Content & Identify Revisions vs. Additions
 The new extraction produced its own `metadata.chapters` list and raw files. Identify whether each new chapter is:
@@ -624,18 +705,18 @@ For each new or revised chapter:
 - Read that raw file and follow **Step 7** to write/update the summary at `$SKILLS_HOME/<skill_name>/chapters/summary/<index>-<slug>.md` (same filename).
 
 ### 4. Merge Supporting Files
-- **Merge glossary.md**:
-  - Read the existing `$SKILLS_HOME/<skill_name>/glossary.md`.
+- **Merge GLOSSARY.md**:
+  - Read the existing `$SKILLS_HOME/<skill_name>/GLOSSARY.md`.
   - Extract all new terms and definitions from the new content (Step 8 glossary guidelines).
   - Combine and alphabetize the list of existing and new terms.
-  - If a term already exists, append the new chapter/source references to it (e.g. `**Term** — definition (Ch 4, Ch 13)`).
-  - Rewrite `$SKILLS_HOME/<skill_name>/glossary.md` with the fully merged, alphabetized list.
-- **Merge patterns.md**:
-  - Read existing `$SKILLS_HOME/<skill_name>/patterns.md`.
+  - If a term already exists, append the new chapter references to it as summary links (e.g. `**Term** — definition ([ch04](chapters/summary/ch04-<slug>.md), [ch13](chapters/summary/ch13-<slug>.md))`).
+  - Rewrite `$SKILLS_HOME/<skill_name>/GLOSSARY.md` with the fully merged, alphabetized list.
+- **Merge PATTERNS.md**:
+  - Read existing `$SKILLS_HOME/<skill_name>/PATTERNS.md`.
   - Extract any new techniques, algorithms, or patterns from the new content.
   - Append the new patterns, ensuring consistent formatting, and keeping the total length concise (under 2,500 tokens).
-- **Merge cheatsheet.md**:
-  - Read existing `$SKILLS_HOME/<skill_name>/cheatsheet.md`.
+- **Merge CHEATSHEET.md**:
+  - Read existing `$SKILLS_HOME/<skill_name>/CHEATSHEET.md`.
   - Extract new comparison rules, decision tables, or parameter guides.
   - Integrate them cleanly into the cheatsheet structure.
 

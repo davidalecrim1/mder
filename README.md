@@ -34,9 +34,9 @@ Each converted book becomes a folder:
 | `SKILL.md` | Core mental models + chapter index |
 | `chapters/summary/ch01-*.md` | Distilled chapter — one per chapter, loaded on demand |
 | `chapters/raw/ch01-*.md` | Verbatim source text for the same chapter (open when full detail is needed) |
-| `glossary.md` | Key terms, alphabetically, with chapter refs |
-| `patterns.md` | Techniques, algorithms, design patterns |
-| `cheatsheet.md` | Decision tables and quick-reference rules |
+| `GLOSSARY.md` | Key terms, alphabetically, each linked to its chapter summary |
+| `PATTERNS.md` | Techniques, algorithms, design patterns |
+| `CHEATSHEET.md` | Decision tables and quick-reference rules |
 
 Each `summary/` file pairs 1:1 with a `raw/` file by filename: reason over the summary, open the raw chapter when precision matters.
 

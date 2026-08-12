@@ -44,9 +44,9 @@ document into clean text + metadata; the agent turns that into a structured skil
                   SKILL.md             core frameworks + chapter & topic index (~4K)
                   chapters/summary/*.md  distilled, on-demand, loaded only when asked
                   chapters/raw/*.md      verbatim source text, paired 1:1 by filename
-                  glossary.md          terms
-                  patterns.md          techniques
-                  cheatsheet.md    decision rules / trees / trade-offs / tells
+                  GLOSSARY.md          terms
+                  PATTERNS.md          techniques
+                  CHEATSHEET.md    decision rules / trees / trade-offs / tells
 ```
 
 ## Design principles
@@ -97,7 +97,7 @@ is layered:
   the generator (Step 9.5) that flags instruction-override phrases, model-control
   tags, residual invisible Unicode, authority-widening frontmatter, and
   exfiltration-shaped content across the generated `SKILL.md`, `chapters/*.md`,
-  `glossary.md`, `patterns.md`, and `cheatsheet.md`. Findings name only the rule and
+  `GLOSSARY.md`, `PATTERNS.md`, and `CHEATSHEET.md`. Findings name only the rule and
   file location — never the matched text.
 - **CI** — CodeQL, Bandit (gate on HIGH), Zizmor, and dependency CVE review on PRs.
 
