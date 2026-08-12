@@ -44,21 +44,13 @@ Each `summary/` file pairs 1:1 with a `raw/` file by filename: reason over the s
 
 ### 1. Install the `/mder` skill
 
-`mder` runs as a skill inside your coding agent. Install it once per agent by cloning this repo into that agent's skills folder:
-
-| Agent | Skills folder | Install |
-|-------|---------------|---------|
-| **Claude Code** | `~/.claude/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.claude/skills/mder` |
-| **Codex** | `~/.agents/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.agents/skills/mder` |
-| **OpenCode** | `~/.agents/skills/` | `git clone https://github.com/davidalecrim1/mder.git ~/.agents/skills/mder` |
-
-Codex and OpenCode both discover the cross-agent `~/.agents/skills/` folder, so one clone covers both.
-
-**Install for every agent at once** — the script clones into both skills folders (and updates them if already present):
+`mder` runs as a skill inside your coding agent. The installer copies just the skill files (`SKILL.md`, `scripts/`, `mder/` — not the repo's docs, tests, or tooling) into your agents' skills folders:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/davidalecrim1/mder/master/install.sh | bash
 ```
+
+It installs into `~/.claude/skills/mder` (Claude Code) and `~/.agents/skills/mder` (Codex and OpenCode, which share the cross-agent folder). Re-running updates the skill in place.
 
 Then check the optional extractors (EPUB/PDF/DOCX quality) and install anything missing — the command prints exactly what to run:
 
