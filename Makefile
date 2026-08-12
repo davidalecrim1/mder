@@ -13,7 +13,7 @@ lint:
 	ruff check --select E9,F --target-version py310 mder/ scripts/ tests/ tools/
 
 smoke:
-	@set -euo pipefail; \
+	@set -eu; \
 	mkdir -p sample; \
 	printf '# Backpressure\n\nChapter 1\nBounded queues prevent overload.\n' > sample/note.md; \
 	export MDER_WORKDIR="$${TMPDIR:-/tmp}/mder_smoke"; \
