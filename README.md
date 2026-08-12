@@ -68,5 +68,6 @@ Open any agent — **Claude Code, Codex, or OpenCode** — and run:
 
 - `--input <path>` — a document, folder, or glob (repeatable).
 - `--output <dir>` — destination root. Defaults to `~/.mder/`.
+- `--raw-only` — extract the verbatim chapters only: writes `chapters/raw/` plus a lean `SKILL.md` index, and skips the summaries, glossary, patterns, and cheatsheet.
 
 The result is written to `<output>/<book-slug>/` (e.g. `~/.mder/skin-in-the-game/`). The legacy positional form `/mder book.epub my-slug` still works.
